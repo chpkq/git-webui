@@ -43,6 +43,10 @@ export class OperationService {
 
   private readonly events = new EventEmitter();
 
+  private readonly controllers = new Map<string, AbortController>();
+
+  private readonly cancelled = new Set<string>();
+
   public constructor(
     private readonly repositoryService: RepositoryService,
     private readonly gitProvider: GitProvider,
@@ -61,6 +65,29 @@ export class OperationService {
 
   public list(repositoryId?: string): Operation[] {
     return this.store.list(repositoryId);
+  }
+
+  public cancel(id: string): Operation {
+    this.assertCanWrite();
+    const operation = this.store.get(id);
+    if (
+      operation.status === 'success' ||
+      operation.status === 'failed' ||
+      operation.status === 'conflict' ||
+      operation.status === 'cancelled'
+    ) {
+      return operation;
+    }
+    if (operation.type !== 'fetch' && operation.type !== 'pull' && operation.type !== 'push') {
+      throw new GitWebUiError('OPERATION_BUSY', '当前操作类型不支持取消。');
+    }
+    const controller = this.controllers.get(id);
+    if (controller === undefined) {
+      throw new GitWebUiError('OPERATION_BUSY', '操作当前不可取消，请等待其完成。');
+    }
+    this.cancelled.add(id);
+    controller.abort();
+    return this.store.get(id);
   }
 
   public async runFileOperation(
@@ -151,9 +178,12 @@ export class OperationService {
     const operation = this.store.create({ id: randomUUID(), repositoryId, type, target });
     this.publish(operation);
     const requireClean = type === 'pull';
+    const controller = new AbortController();
+    this.controllers.set(operation.id, controller);
     try {
       const preflight = await this.createPreflight(repository.path);
       this.publish(this.store.setPreflight(operation.id, preflight));
+      this.throwIfCancelled(operation.id);
       this.assertPreflightReady(preflight, requireClean);
       if (type === 'pull' && preflight.upstream === null) {
         throw new GitWebUiError('NO_UPSTREAM', '当前分支没有设置 upstream，不能执行 Pull。');
@@ -161,6 +191,7 @@ export class OperationService {
       return await this.queue.run(repositoryId, async () => {
         this.publish(this.store.setRunning(operation.id));
         try {
+          this.throwIfCancelled(operation.id);
           const currentPreflight = await this.createPreflight(repository.path);
           this.assertPreflightStable(preflight, currentPreflight);
           this.assertPreflightReady(currentPreflight, requireClean);
@@ -174,9 +205,17 @@ export class OperationService {
             );
           };
           if (type === 'fetch') {
-            await this.gitProvider.fetchAllPrune(repository.path, reportProgress);
+            await this.gitProvider.fetchAllPrune(
+              repository.path,
+              reportProgress,
+              controller.signal,
+            );
           } else if (type === 'pull') {
-            await this.gitProvider.pullFastForwardOnly(repository.path, reportProgress);
+            await this.gitProvider.pullFastForwardOnly(
+              repository.path,
+              reportProgress,
+              controller.signal,
+            );
           } else {
             const remote = readStringTarget(target, 'remote');
             const branch = readStringTarget(target, 'branch');
@@ -186,6 +225,7 @@ export class OperationService {
               branch,
               target.setUpstream === true,
               reportProgress,
+              controller.signal,
             );
           }
           const status = await this.repositoryService.getStatus(repositoryId);
@@ -210,6 +250,9 @@ export class OperationService {
       });
     } catch (error) {
       return this.finishFailure(operation.id, repositoryId, actor, type, error);
+    } finally {
+      this.controllers.delete(operation.id);
+      this.cancelled.delete(operation.id);
     }
   }
 
@@ -290,8 +333,11 @@ export class OperationService {
     type: OperationType,
     error: unknown,
   ): Operation {
-    const mapped = toOperationError(error);
-    const status = mapped.code === 'CONFLICT' ? 'conflict' : 'failed';
+    const wasCancelled = this.cancelled.has(operationId);
+    const mapped = wasCancelled
+      ? { code: 'CANCELLED', message: '操作已取消。' }
+      : toOperationError(error);
+    const status = wasCancelled ? 'cancelled' : mapped.code === 'CONFLICT' ? 'conflict' : 'failed';
     const failed = this.store.setFinished(operationId, status, undefined, mapped);
     this.store.appendAudit({
       operationId: failed.id,
@@ -347,6 +393,12 @@ export class OperationService {
   private assertCanWrite(): void {
     if (this.role === 'viewer') {
       throw new GitWebUiError('PERMISSION_DENIED', 'Viewer 角色不能执行写操作。');
+    }
+  }
+
+  private throwIfCancelled(operationId: string): void {
+    if (this.cancelled.has(operationId)) {
+      throw new GitWebUiError('COMMAND_TIMEOUT', '操作已取消。');
     }
   }
 

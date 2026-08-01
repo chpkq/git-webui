@@ -87,6 +87,23 @@ export const validateGitUrl = (value: string): string => {
   ) {
     throw new GitWebUiError('INVALID_REQUEST', 'Remote URL 格式不正确。');
   }
+  try {
+    const parsed = new URL(value);
+    if (
+      (parsed.protocol === 'http:' || parsed.protocol === 'https:') &&
+      (parsed.username !== '' || parsed.password !== '')
+    ) {
+      throw new GitWebUiError('INVALID_REQUEST', 'Remote URL 不能包含用户名或密码。');
+    }
+    if (parsed.password !== '') {
+      throw new GitWebUiError('INVALID_REQUEST', 'Remote URL 不能包含用户名或密码。');
+    }
+  } catch (error) {
+    if (error instanceof GitWebUiError) throw error;
+  }
+  if (/(?:^|[?&])(access_token|authorization|password|passwd|pat|token)=[^&#]*/iu.test(value)) {
+    throw new GitWebUiError('INVALID_REQUEST', 'Remote URL 不能包含 Token 或密码参数。');
+  }
   return value;
 };
 

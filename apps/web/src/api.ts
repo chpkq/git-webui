@@ -50,7 +50,7 @@ export const apiRequest = async <T>(path: string, init?: RequestInit): Promise<T
     ...init,
     credentials: 'same-origin',
     headers: {
-      'Content-Type': 'application/json',
+      ...(init?.body === undefined ? {} : { 'Content-Type': 'application/json' }),
       ...(csrfToken === null ? {} : { 'X-CSRF-Token': csrfToken }),
       ...init?.headers,
     },
@@ -199,6 +199,12 @@ export const listOperations = async (repositoryId?: string): Promise<Operation[]
     repositoryId === undefined ? '' : `?repositoryId=${encodeURIComponent(repositoryId)}`;
   return await apiRequest<Operation[]>(`/api/operations${params}`);
 };
+
+export const cancelOperation = async (id: string): Promise<Operation> =>
+  await apiRequest<Operation>(`/api/operations/${encodeURIComponent(id)}/cancel`, {
+    method: 'POST',
+    body: JSON.stringify({}),
+  });
 
 const readCookie = (name: string): string | null => {
   const encodedName = `${name}=`;

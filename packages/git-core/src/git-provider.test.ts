@@ -2,7 +2,7 @@ import { mkdtemp, mkdir, rm, symlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { CommandRunner } from './command-runner.js';
+import { CommandRunner, type CommandResult, type CommandRunnerOptions } from './command-runner.js';
 import { GitProvider } from './git-provider.js';
 
 const runGit = async (cwd: string, args: string[]): Promise<void> => {
@@ -59,6 +59,38 @@ describe('GitProvider', () => {
     }
   });
 
+  it.each([
+    [
+      'authentication failure',
+      "fatal: could not read Username for 'https://example.com': terminal prompts disabled",
+      'AUTH_REQUIRED',
+    ],
+    ['host key failure', 'Host key verification failed.', 'HOST_KEY_REQUIRED'],
+    [
+      'network failure',
+      "fatal: unable to access 'https://example.com/repo.git': Could not resolve host",
+      'GIT_COMMAND_FAILED',
+    ],
+  ])('maps %s to a stable error code', async (_name, stderr, code) => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'git-webui-error-map-'));
+    const repositoryPath = path.join(root, 'repository');
+    await mkdir(repositoryPath);
+    try {
+      await runGit(repositoryPath, ['init', '-b', 'main']);
+      const provider = new GitProvider({
+        allowedRoots: [root],
+        runner: new FailingRunner(stderr),
+      });
+      await expect(
+        provider.pushExplicit(repositoryPath, 'origin', 'main', false),
+      ).rejects.toMatchObject({
+        code,
+      });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it('rejects a repository outside allowedRoots and a symlink escape', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'git-webui-allowed-'));
     const outside = await mkdtemp(path.join(os.tmpdir(), 'git-webui-outside-'));
@@ -80,3 +112,34 @@ describe('GitProvider', () => {
     }
   });
 });
+
+class FailingRunner extends CommandRunner {
+  public constructor(private readonly failure: string) {
+    super();
+  }
+
+  public override async run(options: CommandRunnerOptions): Promise<CommandResult> {
+    if (options.args[0] === 'rev-parse' && options.args[1] === '--show-toplevel') {
+      return {
+        command: 'git',
+        args: options.args,
+        exitCode: 0,
+        stdout: `${options.cwd}\n`,
+        stderr: '',
+        stdoutBytes: options.cwd.length + 1,
+        stderrBytes: 0,
+        truncated: false,
+      };
+    }
+    return {
+      command: 'git',
+      args: options.args,
+      exitCode: 128,
+      stdout: '',
+      stderr: this.failure,
+      stdoutBytes: 0,
+      stderrBytes: Buffer.byteLength(this.failure),
+      truncated: false,
+    };
+  }
+}

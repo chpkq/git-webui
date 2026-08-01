@@ -63,18 +63,100 @@ describe('remote and branch management API', () => {
       });
       expect(backToMain.json()).toMatchObject({ type: 'branch-switch', status: 'success' });
 
+      const currentDelete = await app.inject({
+        method: 'DELETE',
+        url: `/api/repositories/${id}/branches`,
+        payload: { name: 'main' },
+      });
+      expect(currentDelete.json()).toMatchObject({
+        type: 'branch-delete',
+        status: 'failed',
+        error: { code: 'INVALID_BRANCH' },
+      });
+
+      const unmergedCreate = await app.inject({
+        method: 'POST',
+        url: `/api/repositories/${id}/branches`,
+        payload: { name: 'feature/unmerged' },
+      });
+      expect(unmergedCreate.json()).toMatchObject({ status: 'success' });
+      const unmergedSwitch = await app.inject({
+        method: 'POST',
+        url: `/api/repositories/${id}/branches/switch`,
+        payload: { name: 'feature/unmerged' },
+      });
+      expect(unmergedSwitch.json()).toMatchObject({ status: 'success' });
+      await writeFile(path.join(repositoryPath, 'unmerged.txt'), 'unmerged\n');
+      await runGit(repositoryPath, ['add', '--', 'unmerged.txt']);
+      await runGit(repositoryPath, ['commit', '-m', '未合并分支提交']);
+      const unmergedBack = await app.inject({
+        method: 'POST',
+        url: `/api/repositories/${id}/branches/switch`,
+        payload: { name: 'main' },
+      });
+      expect(unmergedBack.json()).toMatchObject({ status: 'success' });
+      const unmergedDelete = await app.inject({
+        method: 'DELETE',
+        url: `/api/repositories/${id}/branches`,
+        payload: { name: 'feature/unmerged' },
+      });
+      expect(unmergedDelete.json()).toMatchObject({
+        status: 'failed',
+        error: { code: 'GIT_COMMAND_FAILED' },
+      });
+      await runGit(repositoryPath, ['branch', '-D', '--', 'feature/unmerged']);
+
+      const occupiedCreate = await app.inject({
+        method: 'POST',
+        url: `/api/repositories/${id}/branches`,
+        payload: { name: 'feature/worktree' },
+      });
+      expect(occupiedCreate.json()).toMatchObject({ status: 'success' });
+      const worktreePath = path.join(root, 'linked-worktree');
+      await runGit(repositoryPath, ['worktree', 'add', worktreePath, 'feature/worktree']);
+      const occupiedDelete = await app.inject({
+        method: 'DELETE',
+        url: `/api/repositories/${id}/branches`,
+        payload: { name: 'feature/worktree' },
+      });
+      expect(occupiedDelete.json()).toMatchObject({
+        status: 'failed',
+        error: { code: 'INVALID_BRANCH' },
+      });
+      await runGit(repositoryPath, ['worktree', 'remove', '--force', worktreePath]);
+
+      const maliciousBranch = await app.inject({
+        method: 'POST',
+        url: `/api/repositories/${id}/branches`,
+        payload: { name: '-malicious' },
+      });
+      expect(maliciousBranch.json()).toMatchObject({
+        status: 'failed',
+        error: { code: 'INVALID_BRANCH' },
+      });
+
       const remote = await app.inject({
         method: 'POST',
         url: `/api/repositories/${id}/remotes`,
         payload: { name: 'origin', fetchUrl: 'https://user:secret@example.com/repo.git' },
       });
-      expect(remote.json()).toMatchObject({ type: 'remote-add', status: 'success' });
+      expect(remote.json()).toMatchObject({
+        type: 'remote-add',
+        status: 'failed',
+        error: { code: 'INVALID_REQUEST' },
+      });
+      const safeRemote = await app.inject({
+        method: 'POST',
+        url: `/api/repositories/${id}/remotes`,
+        payload: { name: 'origin', fetchUrl: 'https://example.com/repo.git' },
+      });
+      expect(safeRemote.json()).toMatchObject({ type: 'remote-add', status: 'success' });
       const locations = await app.inject({
         method: 'GET',
         url: `/api/repositories/${id}/locations`,
       });
       expect(locations.json().locations.remotes).toEqual([
-        expect.objectContaining({ fetchUrl: 'https://user:[REDACTED]@example.com/repo.git' }),
+        expect.objectContaining({ fetchUrl: 'https://example.com/repo.git' }),
       ]);
       const operations = await app.inject({
         method: 'GET',

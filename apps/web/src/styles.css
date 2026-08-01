@@ -143,8 +143,25 @@ button:disabled {
 
 .workspace {
   display: grid;
-  grid-template-columns: minmax(210px, 0.23fr) minmax(360px, 0.45fr) minmax(280px, 0.32fr);
+  grid-template-columns:
+    minmax(210px, var(--locations-width, 260px))
+    6px
+    minmax(360px, var(--history-width, 520px))
+    6px
+    minmax(280px, 1fr);
   min-height: 0;
+}
+
+.workspace-resizer {
+  position: relative;
+  z-index: 2;
+  cursor: col-resize;
+  background: #11161d;
+}
+
+.workspace-resizer:hover,
+.workspace-resizer:active {
+  background: #587bc5;
 }
 
 .locations-column,
@@ -343,7 +360,12 @@ button:disabled {
 
 @media (max-width: 1100px) {
   .workspace {
-    grid-template-columns: 200px minmax(340px, 1fr) 280px;
+    grid-template-columns:
+      minmax(200px, var(--locations-width, 220px))
+      6px
+      minmax(340px, var(--history-width, 460px))
+      6px
+      minmax(280px, 1fr);
   }
 }
 
@@ -1008,6 +1030,15 @@ button:disabled {
 .operation-log-time {
   color: #5c6979;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 9px;
+}
+
+.operation-cancel-button {
+  padding: 3px 5px;
+  border: 1px solid #4b3d36;
+  border-radius: 3px;
+  color: #c9a783;
+  background: transparent;
   font-size: 9px;
 }
 

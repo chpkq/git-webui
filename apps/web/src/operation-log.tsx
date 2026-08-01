@@ -1,8 +1,8 @@
-import { useEffect } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useRef } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { Operation } from '@git-webui/shared';
 import { Panel } from '@git-webui/ui-components';
-import { listOperations } from './api.js';
+import { cancelOperation, listOperations } from './api.js';
 
 const statusLabel: Record<Operation['status'], string> = {
   queued: '排队',
@@ -31,20 +31,38 @@ const operationLabel: Record<Operation['type'], string> = {
 
 export const OperationLog = ({ repositoryId }: { repositoryId: string | null }) => {
   const queryClient = useQueryClient();
+  const seenEvents = useRef(new Set<string>());
   const query = useQuery({
     queryKey: ['operations', repositoryId],
     queryFn: () => listOperations(repositoryId ?? undefined),
     enabled: repositoryId !== null,
     refetchInterval: 5000,
   });
+  const cancelMutation = useMutation({
+    mutationFn: cancelOperation,
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['operations', repositoryId] }),
+  });
 
   useEffect(() => {
     if (repositoryId === null) return;
     const source = new EventSource('/api/operations/events');
-    const refresh = (): void => {
+    const rememberEvent = (event: Event): boolean => {
+      const message = event as MessageEvent<string>;
+      const key = `${event.type}:${message.lastEventId}:${message.data}`;
+      if (seenEvents.current.has(key)) return false;
+      seenEvents.current.add(key);
+      if (seenEvents.current.size > 500) {
+        const oldest = seenEvents.current.values().next().value as string | undefined;
+        if (oldest !== undefined) seenEvents.current.delete(oldest);
+      }
+      return true;
+    };
+    const refresh = (event: Event): void => {
+      if (!rememberEvent(event)) return;
       void queryClient.invalidateQueries({ queryKey: ['operations', repositoryId] });
     };
-    const refreshRepository = (): void => {
+    const refreshRepository = (event: Event): void => {
+      if (!rememberEvent(event)) return;
       void queryClient.invalidateQueries({ queryKey: ['status', repositoryId] });
       void queryClient.invalidateQueries({ queryKey: ['locations', repositoryId] });
       void queryClient.invalidateQueries({ queryKey: ['commits', repositoryId] });
@@ -76,6 +94,19 @@ export const OperationLog = ({ repositoryId }: { repositoryId: string | null }) 
                 {typeof operation.target.remote === 'string' ? `${operation.target.remote} ` : ''}
                 {typeof operation.target.branch === 'string' ? operation.target.branch : ''}
               </span>
+              {(operation.status === 'queued' || operation.status === 'running') &&
+                (operation.type === 'fetch' ||
+                  operation.type === 'pull' ||
+                  operation.type === 'push') && (
+                  <button
+                    className="operation-cancel-button"
+                    type="button"
+                    disabled={cancelMutation.isPending}
+                    onClick={() => cancelMutation.mutate(operation.id)}
+                  >
+                    取消
+                  </button>
+                )}
               <span className="operation-log-time">
                 {new Date(operation.createdAt).toLocaleTimeString('zh-CN')}
               </span>

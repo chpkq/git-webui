@@ -60,6 +60,22 @@ describe('sync operation API', () => {
         payload: {},
       });
       expect(fetch.json()).toMatchObject({ type: 'fetch', status: 'success' });
+      const concurrentFetches = await Promise.all([
+        app.inject({
+          method: 'POST',
+          url: `/api/repositories/${repositoryId}/fetch`,
+          payload: {},
+        }),
+        app.inject({
+          method: 'POST',
+          url: `/api/repositories/${repositoryId}/fetch`,
+          payload: {},
+        }),
+      ]);
+      expect(concurrentFetches.map((response) => response.json().status)).toEqual([
+        'success',
+        'success',
+      ]);
 
       await writeFile(path.join(repositoryPath, 'dirty.txt'), 'dirty\n');
       const dirtyPull = await app.inject({
@@ -97,6 +113,60 @@ describe('sync operation API', () => {
         payload: { remote: 'origin', branch: 'main', setUpstream: false },
       });
       expect(push.json()).toMatchObject({ type: 'push', status: 'success' });
+
+      await runGit(repositoryPath, ['branch', '--unset-upstream']);
+      const firstUpstreamPush = await app.inject({
+        method: 'POST',
+        url: `/api/repositories/${repositoryId}/push`,
+        payload: { remote: 'origin', branch: 'main', setUpstream: true },
+      });
+      expect(firstUpstreamPush.json()).toMatchObject({ type: 'push', status: 'success' });
+      expect(await runGit(repositoryPath, ['config', '--get', 'branch.main.remote'])).toBe(
+        'origin',
+      );
+      await runGit(repositoryPath, ['branch', '--unset-upstream']);
+      const noUpstream = await app.inject({
+        method: 'POST',
+        url: `/api/repositories/${repositoryId}/pull`,
+        payload: {},
+      });
+      expect(noUpstream.json()).toMatchObject({
+        type: 'pull',
+        status: 'failed',
+        error: { code: 'NO_UPSTREAM' },
+      });
+
+      await runGit(otherPath, ['fetch', 'origin']);
+      await runGit(otherPath, ['reset', '--hard', 'origin/main']);
+      await writeFile(path.join(otherPath, 'remote-diverged.txt'), 'remote diverged\n');
+      await runGit(otherPath, ['add', '--', 'remote-diverged.txt']);
+      await runGit(otherPath, ['commit', '-m', '远端分叉提交']);
+      await runGit(otherPath, ['push', 'origin', 'main']);
+      await writeFile(path.join(repositoryPath, 'local-diverged.txt'), 'local diverged\n');
+      await runGit(repositoryPath, ['add', '--', 'local-diverged.txt']);
+      await runGit(repositoryPath, ['commit', '-m', '本地分叉提交']);
+      const nonFastForward = await app.inject({
+        method: 'POST',
+        url: `/api/repositories/${repositoryId}/push`,
+        payload: { remote: 'origin', branch: 'main', setUpstream: false },
+      });
+      expect(nonFastForward.json()).toMatchObject({
+        type: 'push',
+        status: 'failed',
+        error: { code: 'NON_FAST_FORWARD' },
+      });
+
+      await runGit(repositoryPath, ['remote', 'set-url', 'origin', path.join(root, 'missing.git')]);
+      const unavailable = await app.inject({
+        method: 'POST',
+        url: `/api/repositories/${repositoryId}/push`,
+        payload: { remote: 'origin', branch: 'main', setUpstream: false },
+      });
+      expect(unavailable.json()).toMatchObject({
+        type: 'push',
+        status: 'failed',
+        error: { code: 'GIT_COMMAND_FAILED' },
+      });
     } finally {
       await app.close();
       await rm(root, { recursive: true, force: true });

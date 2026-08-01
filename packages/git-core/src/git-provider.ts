@@ -73,6 +73,7 @@ export class GitProvider {
     repositoryPath: string,
     args: readonly string[],
     onOutput?: (stream: 'stdout' | 'stderr', chunk: string) => void,
+    signal?: AbortSignal,
   ): Promise<CommandResult> {
     const validated = await this.validateRepository(repositoryPath);
     return await this.runner.run({
@@ -84,6 +85,7 @@ export class GitProvider {
         GCM_INTERACTIVE: 'Never',
       },
       onOutput,
+      signal,
     });
   }
 
@@ -91,8 +93,9 @@ export class GitProvider {
     repositoryPath: string,
     args: readonly string[],
     onOutput?: (stream: 'stdout' | 'stderr', chunk: string) => void,
+    signal?: AbortSignal,
   ): Promise<CommandResult> {
-    const result = await this.execute(repositoryPath, args, onOutput);
+    const result = await this.execute(repositoryPath, args, onOutput, signal);
     if (result.exitCode !== 0) {
       throw this.mapCommandFailure(result);
     }
@@ -140,6 +143,7 @@ export class GitProvider {
   public async fetchAllPrune(
     repositoryPath: string,
     onProgress?: (text: string) => void,
+    signal?: AbortSignal,
   ): Promise<void> {
     await this.executeChecked(
       repositoryPath,
@@ -147,12 +151,14 @@ export class GitProvider {
       (_stream, chunk) => {
         onProgress?.(chunk.trim());
       },
+      signal,
     );
   }
 
   public async pullFastForwardOnly(
     repositoryPath: string,
     onProgress?: (text: string) => void,
+    signal?: AbortSignal,
   ): Promise<void> {
     await this.executeChecked(
       repositoryPath,
@@ -160,6 +166,7 @@ export class GitProvider {
       (_stream, chunk) => {
         onProgress?.(chunk.trim());
       },
+      signal,
     );
   }
 
@@ -169,15 +176,21 @@ export class GitProvider {
     branch: string,
     setUpstream: boolean,
     onProgress?: (text: string) => void,
+    signal?: AbortSignal,
   ): Promise<void> {
     validateGitName(remote, 'remote');
     validateGitName(branch, 'branch');
     const args = ['push', '--progress'];
     if (setUpstream) args.push('--set-upstream');
     args.push(remote, branch);
-    await this.executeChecked(repositoryPath, args, (_stream, chunk) => {
-      onProgress?.(chunk.trim());
-    });
+    await this.executeChecked(
+      repositoryPath,
+      args,
+      (_stream, chunk) => {
+        onProgress?.(chunk.trim());
+      },
+      signal,
+    );
   }
 
   public async addRemote(
@@ -251,7 +264,10 @@ export class GitProvider {
     if (status.branch === name) throw new GitWebUiError('INVALID_BRANCH', '不能删除当前分支。');
     const locations = await this.getLocations(repositoryPath);
     const branch = locations.branches.find((item) => item.name === name);
-    if (branch?.worktreePath !== null && branch?.worktreePath !== undefined) {
+    const occupiedByWorktree =
+      (branch?.worktreePath !== null && branch?.worktreePath !== undefined) ||
+      locations.worktrees.some((worktree) => worktree.branch === name);
+    if (occupiedByWorktree) {
       throw new GitWebUiError('INVALID_BRANCH', '不能删除被其他 Worktree 占用的分支。');
     }
     await this.executeChecked(repositoryPath, ['branch', '-d', '--', name]);

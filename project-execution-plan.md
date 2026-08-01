@@ -127,7 +127,7 @@ Browser
 - [x] **CORE-006** 实现 HEAD、upstream、ahead/behind 和进行中 Git 状态检测。
 - [x] **API-001** 实现 repository/status/locations REST API 和结构化错误。
 - [x] **TEST-001** 建立临时工作仓库 + bare remote 测试工具。
-- [ ] **TEST-002** 覆盖空格、中文、rename、detached HEAD、多 Remote、symlink 和恶意 ref。
+- [x] **TEST-002** 覆盖空格、中文、rename、detached HEAD、多 Remote、symlink 和恶意 ref。
 
 **退出门禁**：API 与相同仓库上的 Git CLI 结果一致；非 `allowedRoots` 仓库、symlink 逃逸和非法 ref 被稳定拒绝；不存在 shell 字符串拼接。
 
@@ -140,8 +140,8 @@ Browser
 - [x] **WEB-002** 实现仓库选择、Locations 分组、计数、当前分支标记与 Ref 切换。
 - [x] **WEB-003** 实现 Commit Timeline、Graph lane、decoration、虚拟列表和无限滚动。
 - [x] **WEB-004** 实现 Summary，显示 Hash、Author、Date、Parents、stats 和 changed files。
-- [ ] **WEB-005** 实现 repo/ref/commit URL 状态、浏览器刷新恢复和面板尺寸保存。
-- [ ] **TEST-003** 建立大历史、merge commit、多 decoration 的性能与组件测试。
+- [x] **WEB-005** 实现 repo/ref/commit URL 状态、浏览器刷新恢复和面板尺寸保存。
+- [x] **TEST-003** 建立大历史、merge commit、多 decoration 的性能与组件测试。
 
 **退出门禁**：用户可从 Locations 切换任意 Local/Remote Ref，分页浏览大仓库历史，刷新后保留仓库、Ref 和 Commit 选中状态。
 
@@ -155,7 +155,7 @@ Browser
 - [x] **WEB-007** 接入 Monaco Diff Editor，实现 Split/Unified、文件 tabs 和查看偏好保存。
 - [x] **WEB-008** 实现 loading、empty、binary、oversize、error 和 truncated 状态。
 - [x] **WEB-009** 实现 Stage/Unstage 操作确认、禁用状态和完成后精确刷新。
-- [ ] **TEST-004** 覆盖中文/空格/换行路径、rename、删除、binary、超大 Diff 和并发 Stage。
+- [x] **TEST-004** 覆盖中文/空格/换行路径、rename、删除、binary、超大 Diff 和并发 Stage。
 
 **退出门禁**：Working Copy 与任意 Commit 可逐文件审查；Stage/Unstage 结果与 Git CLI 一致；错误操作不会产生部分成功且无提示的 UI 状态。
 
@@ -163,13 +163,13 @@ Browser
 
 - [x] **OPS-001** 完善 per-repo Operation Queue，支持 queued/running/success/failed/conflict/cancelled。
 - [x] **OPS-002** 实现 operationId、preflight snapshot、结构化结果和操作日志持久化。
-- [ ] **OPS-003** 实现 SSE 事件流，处理断线重连和事件去重。
-- [ ] **OPS-004** 实现 `fetch --all --prune --progress`、进度解析和安全取消。
+- [x] **OPS-003** 实现 SSE 事件流，处理断线重连和事件去重。
+- [x] **OPS-004** 实现 `fetch --all --prune --progress`、进度解析和安全取消。
 - [x] **OPS-005** 实现 Pull preflight 和 `pull --ff-only --progress`。
 - [x] **OPS-006** 实现 Push 目标显式选择、`--set-upstream`和默认禁止 force。
 - [x] **OPS-007** 实现 AUTH_REQUIRED、HOST_KEY_REQUIRED、NON_FAST_FORWARD、DIRTY_WORKTREE 等错误映射。
 - [x] **WEB-010** 实现 Update/Pull/Push 目标摘要、预检、进度、结果与 Operation Log。
-- [ ] **TEST-005** 覆盖 bare remote、首次 Push、无 upstream、非快进、断网、鉴权失败和多标签页并发。
+- [x] **TEST-005** 覆盖 bare remote、首次 Push、无 upstream、非快进、断网、鉴权失败和多标签页并发。
 
 **退出门禁**：同一仓库的写操作严格串行，不同仓库可并行；网络失败、认证失败、非快进和冲突均不破坏工作区，且 UI 提供可操作的下一步建议。
 
@@ -183,7 +183,7 @@ Browser
 - [x] **WEB-011** 实现 Locations 上下文菜单和 Remote 增删改对话框。
 - [x] **WEB-012** 实现 Branch 创建/切换/重命名/删除/设置 upstream 对话框。
 - [x] **WEB-013** 根据权限和 preflight 结果控制入口、禁用原因和二次确认。
-- [ ] **TEST-006** 覆盖恶意 Remote/Branch 名、当前分支删除、未合并删除、Worktree 占用和越权请求。
+- [x] **TEST-006** 覆盖恶意 Remote/Branch 名、当前分支删除、未合并删除、Worktree 占用和越权请求。
 
 **退出门禁**：日常 Remote/Branch 操作可从 Locations 完成；高风险和越权操作被服务端拒绝，不仅是前端隐藏；审计日志不包含凭据。
 
@@ -194,10 +194,10 @@ Browser
 - [x] **SEC-002** 实现远程模式登录、安全 session/cookie、CSRF 和登录限流。
 - [x] **SEC-003** 实现远程监听安全门禁，鉴权未就绪时拒绝绑定 `0.0.0.0`。
 - [x] **SEC-004** 完成凭据、URL、环境变量、stdout/stderr 和 API 响应的脱敏审计。
-- [ ] **TEST-007** 完成 Unit、Integration、API、Frontend、E2E、Concurrency、Failure 分层测试。
+- [x] **TEST-007** 完成 Unit、Integration、API、Frontend、E2E、Concurrency、Failure 分层测试。
 - [ ] **TEST-008** 在 macOS、Linux、Windows 上验证启动、中文路径、Stage/Unstage、Fetch/Pull/Push。
-- [ ] **REL-001** 输出 npm/standalone/Docker 三类运行方式与版本化配置。
-- [ ] **REL-002** 编写 README：安装、allowedRoots、凭据、SSH Agent、Tailscale/LAN、反向代理、Docker 挂载和故障排查。
+- [x] **REL-001** 输出 npm/standalone/Docker 三类运行方式与版本化配置。
+- [x] **REL-002** 编写 README：安装、allowedRoots、凭据、SSH Agent、Tailscale/LAN、反向代理、Docker 挂载和故障排查。
 - [ ] **REL-003** 按第 8 节发布清单执行完整候选版验收。
 
 **退出门禁**：默认配置安全；远程模式的身份、权限、CSRF 和审计闭环通过；外部变更数秒内可见；三平台核心流程有真实证据；安装和运维文档可被新用户独立执行。

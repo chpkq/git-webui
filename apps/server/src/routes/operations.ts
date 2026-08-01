@@ -40,6 +40,11 @@ export const registerOperationRoutes = async (
     service.list(request.query.repositoryId),
   );
 
+  app.post<{ Params: { id: string } }>('/api/operations/:id/cancel', async (request) => {
+    assertCanWrite(role);
+    return service.cancel(request.params.id);
+  });
+
   app.post<{ Params: { id: string } }>('/api/repositories/:id/stage', async (request) => {
     assertCanWrite(role);
     const input = pathsMutationSchema.parse(request.body);
@@ -105,7 +110,13 @@ export const registerOperationRoutes = async (
     });
     const send = (event: OperationUpdatedEvent | RepositoryChangedEvent): void => {
       const data = event.type === 'operation.updated' ? event.operation : event;
-      reply.raw.write(`event: ${event.type}\ndata: ${JSON.stringify(data)}\n\n`);
+      const eventId =
+        event.type === 'operation.updated'
+          ? `${event.operation.id}:${event.operation.status}:${event.operation.progress?.text ?? ''}`
+          : `${event.repositoryId}:${event.changedAt}`;
+      reply.raw.write(
+        `id: ${eventId.replace(/[\r\n]/gu, '')}\nevent: ${event.type}\ndata: ${JSON.stringify(data)}\n\n`,
+      );
     };
     const unsubscribe = service.subscribe(send);
     const unsubscribeWatcher = watcher?.subscribe(send);

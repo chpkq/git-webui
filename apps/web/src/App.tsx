@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import type { CSSProperties, PointerEvent as ReactPointerEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { HealthResponse, Repository } from '@git-webui/shared';
 import { StatusPill } from '@git-webui/ui-components';
@@ -30,11 +31,43 @@ import { useWorkspaceStore } from './workspace-store.js';
 const fetchHealth = async (): Promise<HealthResponse> =>
   await apiRequest<HealthResponse>('/health');
 
+interface WorkspaceLayout {
+  locations: number;
+  history: number;
+}
+
+const DEFAULT_WORKSPACE_LAYOUT: WorkspaceLayout = { locations: 260, history: 520 };
+
+const readWorkspaceLayout = (): WorkspaceLayout => {
+  if (typeof window === 'undefined') return DEFAULT_WORKSPACE_LAYOUT;
+  try {
+    const parsed = JSON.parse(
+      window.localStorage.getItem('git-webui-layout') ?? 'null',
+    ) as Partial<WorkspaceLayout> | null;
+    return {
+      locations:
+        typeof parsed?.locations === 'number'
+          ? clamp(parsed.locations, 210, 420)
+          : DEFAULT_WORKSPACE_LAYOUT.locations,
+      history:
+        typeof parsed?.history === 'number'
+          ? clamp(parsed.history, 360, 900)
+          : DEFAULT_WORKSPACE_LAYOUT.history,
+    };
+  } catch {
+    return DEFAULT_WORKSPACE_LAYOUT;
+  }
+};
+
+const clamp = (value: number, minimum: number, maximum: number): number =>
+  Math.min(maximum, Math.max(minimum, value));
+
 function App() {
   const queryClient = useQueryClient();
   const [registerOpen, setRegisterOpen] = useState(false);
   const [syncAction, setSyncAction] = useState<SyncAction | null>(null);
   const [managementOpen, setManagementOpen] = useState(false);
+  const [workspaceLayout, setWorkspaceLayout] = useState<WorkspaceLayout>(readWorkspaceLayout);
   const { repositoryId, ref, commitHash, view, setRepositoryId, setRef, setCommitHash, setView } =
     useWorkspaceStore();
   const authQuery = useQuery({ queryKey: ['auth'], queryFn: getAuthSession, staleTime: 60_000 });
@@ -136,12 +169,64 @@ function App() {
     window.history.replaceState(null, '', query === '' ? window.location.pathname : `?${query}`);
   }, [repositoryId, ref, commitHash]);
 
+  useEffect(() => {
+    const handleShortcut = (event: KeyboardEvent): void => {
+      if (!(event.metaKey || event.ctrlKey) || !event.shiftKey || repositoryId === null) return;
+      const target = event.target as HTMLElement | null;
+      if (
+        target?.tagName === 'INPUT' ||
+        target?.tagName === 'TEXTAREA' ||
+        target?.tagName === 'SELECT' ||
+        target?.isContentEditable
+      ) {
+        return;
+      }
+      const actions: Record<string, SyncAction> = { u: 'fetch', p: 'pull', s: 'push' };
+      const action = actions[event.key.toLowerCase()];
+      if (action === undefined || role === 'viewer') return;
+      event.preventDefault();
+      setSyncAction(action);
+    };
+    window.addEventListener('keydown', handleShortcut);
+    return () => window.removeEventListener('keydown', handleShortcut);
+  }, [repositoryId, role]);
+
   const registerError =
     registerMutation.error instanceof Error ? registerMutation.error.message : null;
   const handleRemove = (repository: Repository): void => {
     if (window.confirm(`移除“${repository.name}”的注册？磁盘上的仓库不会被删除。`)) {
       removeMutation.mutate(repository);
     }
+  };
+
+  const startResize = (
+    kind: 'locations' | 'history',
+    event: ReactPointerEvent<HTMLDivElement>,
+  ): void => {
+    event.preventDefault();
+    const initialX = event.clientX;
+    const initialLayout = workspaceLayout;
+    const onMove = (moveEvent: PointerEvent): void => {
+      const delta = moveEvent.clientX - initialX;
+      const nextLayout = {
+        ...initialLayout,
+        [kind]: clamp(
+          initialLayout[kind] + delta,
+          kind === 'locations' ? 210 : 360,
+          kind === 'locations' ? 420 : 900,
+        ),
+      };
+      setWorkspaceLayout(nextLayout);
+      window.localStorage.setItem('git-webui-layout', JSON.stringify(nextLayout));
+    };
+    const onUp = (): void => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      document.body.style.cursor = '';
+    };
+    document.body.style.cursor = 'col-resize';
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp, { once: true });
   };
 
   if (authQuery.isPending)
@@ -222,7 +307,15 @@ function App() {
         </div>
       </header>
 
-      <main className="workspace">
+      <main
+        className="workspace"
+        style={
+          {
+            '--locations-width': `${workspaceLayout.locations}px`,
+            '--history-width': `${workspaceLayout.history}px`,
+          } as CSSProperties
+        }
+      >
         <aside className="locations-column">
           <LocationsPanel
             repositories={repositories}
@@ -240,6 +333,12 @@ function App() {
             role={role}
           />
         </aside>
+        <div
+          className="workspace-resizer"
+          role="separator"
+          aria-label="调整 Locations 宽度"
+          onPointerDown={(event) => startResize('locations', event)}
+        />
 
         <section className="history-column">
           <div className="view-tabs" role="tablist" aria-label="工作区视图">
@@ -281,6 +380,12 @@ function App() {
             )}
           </div>
         </section>
+        <div
+          className="workspace-resizer"
+          role="separator"
+          aria-label="调整 History 宽度"
+          onPointerDown={(event) => startResize('history', event)}
+        />
 
         <aside className="detail-column">
           <SummaryPanel repositoryId={repositoryId} commitHash={commitHash} />
