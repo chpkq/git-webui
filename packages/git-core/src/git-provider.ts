@@ -1,5 +1,4 @@
 import { access } from 'node:fs/promises';
-import os from 'node:os';
 import path from 'node:path';
 import {
   GitWebUiError,
@@ -663,7 +662,7 @@ export class GitProvider {
         '--no-ext-diff',
         '--unified=3',
         '--',
-        os.devNull,
+        '/dev/null',
         safePath,
       ]);
       if (result.exitCode !== 0 && result.exitCode !== 1) throw this.mapCommandFailure(result);
