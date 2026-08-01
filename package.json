@@ -9,6 +9,7 @@
   "scripts": {
     "build": "pnpm -r build",
     "build:packages": "pnpm --filter @git-webui/shared build && pnpm --filter @git-webui/git-core build && pnpm --filter @git-webui/ui-components build",
+    "package:standalone": "pnpm build && node scripts/package-standalone.mjs",
     "dev": "pnpm build:packages && pnpm --parallel --filter @git-webui/server --filter @git-webui/web dev",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

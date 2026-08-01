@@ -11,3 +11,4 @@ test-results/
 *.tsbuildinfo
 data/*.sqlite
 data/*.sqlite-*
+release/

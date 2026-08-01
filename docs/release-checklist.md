@@ -1,0 +1,22 @@
+# V0.1 发布验收清单
+
+这份清单记录当前 checkout 的可复验结果，不把静态检查当作跨平台或浏览器部署证据。
+
+## 本地验证
+
+- [x] `corepack pnpm typecheck`
+- [x] `corepack pnpm lint`
+- [x] `corepack pnpm format:check`
+- [x] `corepack pnpm test`：真实临时 Git 仓库、bare remote、边界路径、权限、同步和取消测试
+- [x] `corepack pnpm exec playwright test tests/e2e/smoke.spec.ts --project=chromium`：注册仓库、Working Copy、URL 状态、面板尺寸保存和移除注册
+- [x] 默认配置回环监听、远程监听门禁、session、CSRF 和登录限流
+- [x] `Dockerfile`、`docker-compose.yml`、Nginx SSE 代理和 standalone 打包脚本已提交
+
+## 目标部署环境仍需执行
+
+- [ ] macOS、Linux、Windows 各执行一次启动、中文路径、Stage/Unstage、Fetch/Pull/Push
+- [ ] 在装有 Docker daemon 的主机运行 `docker compose up -d --build`，检查 `/health`、登录和真实挂载仓库
+- [ ] 在目标 HTTPS 反向代理和 Tailscale ACL 下验证 Secure Cookie、SSE、断线重连和权限
+- [ ] 使用目标主机实际 SSH Agent 或 credential helper 完成 Push/Pull，并确认认证失败提示不泄漏凭据
+
+未执行项目不能在发布说明中标记为“通过”；完成后应补充平台、Git 版本、Docker 版本和操作证据。

@@ -69,6 +69,7 @@ pnpm --filter @git-webui/server start
 - Git 子进程继承系统 SSH Agent、credential helper 和用户级 Git 配置。
 - 服务设置 `GIT_TERMINAL_PROMPT=0` 和 `GCM_INTERACTIVE=Never`，需要交互输入时返回结构化错误。
 - 应用不保存 Remote 密码、PAT、SSH 私钥或 Authorization 数据；Remote URL、操作目标和错误输出会脱敏。
+- Remote URL 中的用户名、密码、Token 和常见凭据查询参数会在写入 Git 配置前被拒绝。
 - 所有 ref、remote、branch、commitish 和仓库内路径都作为独立参数传给 Git，子进程使用 `shell=false`。
 - 注册仓库和每次查询/写操作都会重新检查真实路径与 `allowedRoots`，防止注册后的 symlink 逃逸。
 
@@ -76,8 +77,63 @@ pnpm --filter @git-webui/server start
 
 - 前端开发服务器：`pnpm --filter @git-webui/web dev`，后端：`pnpm --filter @git-webui/server dev`。Vite 会把 `/health` 和 `/api` 转发到 `127.0.0.1:3000`。
 - 首次运行先执行 `pnpm typecheck && pnpm lint && pnpm test`。
+- 主窗口支持 `Ctrl/Cmd + Shift + U` 更新、`Ctrl/Cmd + Shift + P` Pull、`Ctrl/Cmd + Shift + S` Push；输入框获得焦点时不会拦截快捷键。
 - `DIRTY_WORKTREE`、`NO_UPSTREAM`、`NON_FAST_FORWARD`、`AUTH_REQUIRED` 和 `HOST_KEY_REQUIRED` 等错误会显示在 Operation Log；应用不会自动执行 force push、merge、rebase 或历史改写。
 - 如果外部 Git 修改了仓库，watcher 会通过 SSE 触发状态、Locations、History 和 Diff 查询失效；查询 API 仍是真实状态入口。
 - 数据库只保存仓库注册、设置、操作和审计记录。删除注册不会删除磁盘仓库；备份 SQLite 前应先停止服务或复制 WAL 相关文件后再归档。
 
-当前仓库提供 pnpm 源码运行方式。Docker/Nginx 镜像、跨平台真机和真实浏览器验收需要在目标部署环境继续执行，不能用本地 typecheck 或 API 测试替代。
+## 发布运行方式
+
+### pnpm/npm 兼容的源码方式
+
+仓库使用标准 `package.json` scripts，可由 pnpm 或 npm 兼容调用。生产启动前先构建：
+
+```bash
+corepack pnpm install --frozen-lockfile
+corepack pnpm build
+GIT_WEBUI_ALLOWED_ROOTS=/Users/you/src \
+GIT_WEBUI_DATABASE=/Users/you/.local/share/git-webui/data.sqlite \
+corepack pnpm --filter @git-webui/server start
+```
+
+前端可由 Nginx、Caddy 或其他静态文件服务器发布 `apps/web/dist`，并将 `/api`、`/health` 反向代理到后端 `127.0.0.1:3000`。
+
+### Standalone 目录包
+
+Standalone 包包含后端生产依赖、前端静态文件和单进程启动代理，输出目录带有 V0.1 版本号：
+
+```bash
+corepack pnpm package:standalone
+cd release/git-webui-v0.1.0
+GIT_WEBUI_ALLOWED_ROOTS=/Users/you/src \
+GIT_WEBUI_AUTH_ENABLED=true \
+GIT_WEBUI_AUTH_PASSWORD='change-this-long-password' \
+GIT_WEBUI_SESSION_SECRET='use-a-random-secret-at-least-32-chars' \
+node start.mjs
+```
+
+默认访问 <http://127.0.0.1:4173>。Standalone 启动器只把后端绑定到本机回环地址；需要 LAN/Tailscale 访问时，应放在 HTTPS 反向代理之后，并完成登录、CSRF 和权限配置。
+
+### Docker Compose + Nginx
+
+Docker 方式把宿主机工作区映射到容器内 `/workspaces`，并由 `GIT_WEBUI_ALLOWED_ROOTS=/workspaces` 限定可注册范围；SQLite 数据保存于 named volume。先复制配置并填写真实路径、密码和随机 session secret：
+
+```bash
+cp .env.example .env
+corepack pnpm exec prettier --check docker-compose.yml
+docker compose up -d --build
+curl http://127.0.0.1:8080/health
+```
+
+默认只将 Nginx 发布到 `127.0.0.1:8080`。通过反向代理或 Tailscale 暴露时，保持 Web 端口在本机，启用 HTTPS 后把 `GIT_WEBUI_COOKIE_SECURE=true`。容器内的 Git 不会自动获得宿主机 SSH Agent、credential helper 或用户级 Git 配置；需要 Push/Pull 时，应按部署平台的安全方式显式提供 SSH Agent/凭据，应用本身仍不保存这些秘密。
+
+备份 Docker 数据前停止后端容器，备份 `/var/lib/git-webui` 对应的 named volume；恢复后再启动服务。不要只复制正在写入的 SQLite 主文件而忽略 WAL 文件。
+
+## LAN、Tailscale 与反向代理边界
+
+- 本机开发和 Standalone 默认只监听 `127.0.0.1`。
+- 直接监听 LAN/Tailscale 地址必须设置 `GIT_WEBUI_ENABLE_REMOTE=true`、密码、session secret 和角色；缺少任一项服务会拒绝启动。
+- 更推荐由 Nginx/Caddy/Traefik 终止 HTTPS，再转发 `/`、`/api` 和 `/health`；反向代理必须支持 SSE，关闭 `/api/operations/events` 的缓冲并提高读取超时。
+- Tailscale ACL、HTTPS 证书和主机防火墙属于部署层控制，不能替代 WebUI 登录、角色校验和 CSRF。
+
+完整发布门禁和当前环境未执行的跨平台项目见 [docs/release-checklist.md](./docs/release-checklist.md)。

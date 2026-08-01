@@ -1,0 +1,44 @@
+services:
+  server:
+    build:
+      context: .
+      target: server-runtime
+    environment:
+      GIT_WEBUI_HOST: 0.0.0.0
+      GIT_WEBUI_PORT: 3000
+      GIT_WEBUI_ALLOWED_ROOTS: /workspaces
+      GIT_WEBUI_DATABASE: /var/lib/git-webui/data.sqlite
+      GIT_WEBUI_ENABLE_REMOTE: 'true'
+      GIT_WEBUI_AUTH_PASSWORD: '${GIT_WEBUI_AUTH_PASSWORD:?set GIT_WEBUI_AUTH_PASSWORD in .env}'
+      GIT_WEBUI_SESSION_SECRET: '${GIT_WEBUI_SESSION_SECRET:?set GIT_WEBUI_SESSION_SECRET in .env}'
+      GIT_WEBUI_COOKIE_SECURE: '${GIT_WEBUI_COOKIE_SECURE:-false}'
+      GIT_WEBUI_ROLE: admin
+    volumes:
+      - '${GIT_WEBUI_WORKSPACES:?set GIT_WEBUI_WORKSPACES in .env}:/workspaces'
+      - git-webui-data:/var/lib/git-webui
+    expose:
+      - '3000'
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:3000/health').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+  web:
+    build:
+      context: .
+      target: web-runtime
+    depends_on:
+      server:
+        condition: service_healthy
+    ports:
+      - '${GIT_WEBUI_WEB_BIND:-127.0.0.1:8080}:80'
+
+volumes:
+  git-webui-data:
