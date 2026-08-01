@@ -1,6 +1,8 @@
 import { basename } from 'node:path';
 import {
   GitWebUiError,
+  type CommitDetail,
+  type CommitPage,
   type Locations,
   type Repository,
   type RepositoryStatus,
@@ -64,5 +66,29 @@ export class RepositoryService {
   public async getLocations(id: string): Promise<{ repository: Repository; locations: Locations }> {
     const repository = await this.validateRegistered(id);
     return { repository, locations: await this.gitProvider.getLocations(repository.path) };
+  }
+
+  public async getCommits(
+    id: string,
+    ref: string,
+    offset: number,
+    limit: number,
+  ): Promise<{ repository: Repository; page: CommitPage }> {
+    const repository = await this.validateRegistered(id);
+    return {
+      repository,
+      page: await this.gitProvider.getCommitPage(repository.path, ref, offset, limit),
+    };
+  }
+
+  public async getCommitDetail(
+    id: string,
+    commitish: string,
+  ): Promise<{ repository: Repository; detail: CommitDetail }> {
+    const repository = await this.validateRegistered(id);
+    return {
+      repository,
+      detail: await this.gitProvider.getCommitDetail(repository.path, commitish),
+    };
   }
 }

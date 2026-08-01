@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
-import { registerRepositoryInputSchema } from '@git-webui/shared';
+import { commitsQuerySchema, registerRepositoryInputSchema } from '@git-webui/shared';
 import { GitWebUiError } from '@git-webui/shared';
 import type { RepositoryService } from '../repository-service.js';
 
@@ -37,4 +37,22 @@ export const registerRepositoryRoutes = async (
   app.get<{ Params: { id: string } }>('/api/repositories/:id/locations', async (request) => {
     return await service.getLocations(getRepositoryId(request));
   });
+
+  app.get<{
+    Params: { id: string };
+    Querystring: { ref?: string; cursor?: string; limit?: string };
+  }>('/api/repositories/:id/commits', async (request) => {
+    const query = commitsQuerySchema.parse(request.query);
+    const offset = query.cursor === undefined ? 0 : Number(query.cursor);
+    if (!Number.isSafeInteger(offset) || offset < 0) {
+      throw new GitWebUiError('INVALID_REQUEST', 'Commit 分页 cursor 格式不正确。');
+    }
+    return await service.getCommits(getRepositoryId(request), query.ref, offset, query.limit);
+  });
+
+  app.get<{ Params: { id: string; commitish: string } }>(
+    '/api/repositories/:id/commits/:commitish',
+    async (request) =>
+      await service.getCommitDetail(getRepositoryId(request), request.params.commitish),
+  );
 };

@@ -60,6 +60,24 @@ describe('repository REST API', () => {
         expect.arrayContaining([expect.objectContaining({ name: 'main', current: true })]),
       );
 
+      const commits = await app.inject({
+        method: 'GET',
+        url: `/api/repositories/${repository.id}/commits?ref=HEAD&limit=10`,
+      });
+      expect(commits.statusCode).toBe(200);
+      expect(commits.json().page.items).toEqual(
+        expect.arrayContaining([expect.objectContaining({ subject: '初始化测试仓库' })]),
+      );
+      const commitHash = commits.json().page.items[0].hash as string;
+      const detail = await app.inject({
+        method: 'GET',
+        url: `/api/repositories/${repository.id}/commits/${commitHash}`,
+      });
+      expect(detail.statusCode).toBe(200);
+      expect(detail.json().detail.changedFiles).toEqual(
+        expect.arrayContaining([expect.objectContaining({ path: 'readme.md', additions: 1 })]),
+      );
+
       const removed = await app.inject({
         method: 'DELETE',
         url: `/api/repositories/${repository.id}`,

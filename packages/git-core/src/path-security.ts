@@ -67,6 +67,19 @@ export const validateGitName = (value: string, kind: 'ref' | 'remote' | 'branch'
   return value;
 };
 
+export const validateCommitish = (value: string): string => {
+  if (
+    value.length === 0 ||
+    value.startsWith('-') ||
+    value.includes('\0') ||
+    hasControlCharacters(value) ||
+    /\s/u.test(value)
+  ) {
+    throw new GitWebUiError('INVALID_REF', '非法的 commitish。', { value });
+  }
+  return value;
+};
+
 export const validateRepositoryPath = async (
   candidate: string,
   allowedRoots: readonly string[],

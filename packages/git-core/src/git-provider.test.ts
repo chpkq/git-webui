@@ -42,6 +42,16 @@ describe('GitProvider', () => {
       expect(locations.branches).toEqual(
         expect.arrayContaining([expect.objectContaining({ name: 'main', current: true })]),
       );
+      const commits = await provider.getCommitPage(repositoryPath, 'HEAD', 0, 10);
+      expect(commits.items).toHaveLength(1);
+      expect(commits.items[0]).toMatchObject({ subject: '初始提交', changedFiles: 2 });
+      const detail = await provider.getCommitDetail(
+        repositoryPath,
+        commits.items[0]?.hash ?? 'HEAD',
+      );
+      expect(detail.changedFiles).toEqual(
+        expect.arrayContaining([expect.objectContaining({ path: 'readme.txt', additions: 1 })]),
+      );
     } finally {
       await rm(root, { recursive: true, force: true });
     }

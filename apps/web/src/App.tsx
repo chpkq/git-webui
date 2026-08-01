@@ -1,17 +1,93 @@
-import { useQuery } from '@tanstack/react-query';
-import { EmptyState, Panel, StatusPill } from '@git-webui/ui-components';
-import type { HealthResponse } from '@git-webui/shared';
+import { useEffect, useMemo, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import type { HealthResponse, Repository } from '@git-webui/shared';
+import { EmptyState, StatusPill } from '@git-webui/ui-components';
+import {
+  apiRequest,
+  getRepositoryLocations,
+  getRepositoryStatus,
+  listRepositories,
+  registerRepository,
+  removeRepository,
+} from './api.js';
+import { HistoryView } from './history-view.js';
+import { LocationsPanel } from './locations-panel.js';
+import { RegisterDialog } from './register-dialog.js';
+import { SummaryPanel } from './summary-panel.js';
+import { useWorkspaceStore } from './workspace-store.js';
 
-const fetchHealth = async (): Promise<HealthResponse> => {
-  const response = await fetch('/health');
-  if (!response.ok) {
-    throw new Error(`健康检查失败：${response.status}`);
-  }
-  return (await response.json()) as HealthResponse;
-};
+const fetchHealth = async (): Promise<HealthResponse> =>
+  await apiRequest<HealthResponse>('/health');
 
 function App() {
+  const queryClient = useQueryClient();
+  const [registerOpen, setRegisterOpen] = useState(false);
+  const { repositoryId, ref, commitHash, view, setRepositoryId, setRef, setCommitHash, setView } =
+    useWorkspaceStore();
   const health = useQuery({ queryKey: ['health'], queryFn: fetchHealth, refetchInterval: 10_000 });
+  const repositoriesQuery = useQuery({ queryKey: ['repositories'], queryFn: listRepositories });
+  const locationsQuery = useQuery({
+    queryKey: ['locations', repositoryId],
+    queryFn: () => getRepositoryLocations(repositoryId!),
+    enabled: repositoryId !== null,
+  });
+  const statusQuery = useQuery({
+    queryKey: ['status', repositoryId],
+    queryFn: () => getRepositoryStatus(repositoryId!),
+    enabled: repositoryId !== null,
+    refetchInterval: 3000,
+  });
+  const registerMutation = useMutation({
+    mutationFn: ({ path, name }: { path: string; name: string }) => registerRepository(path, name),
+    onSuccess: (repository) => {
+      void queryClient.invalidateQueries({ queryKey: ['repositories'] });
+      setRepositoryId(repository.id);
+      setRegisterOpen(false);
+    },
+  });
+  const removeMutation = useMutation({
+    mutationFn: (repository: Repository) => removeRepository(repository.id),
+    onSuccess: (_result, repository) => {
+      if (repository.id === repositoryId) setRepositoryId(null);
+      void queryClient.invalidateQueries({ queryKey: ['repositories'] });
+    },
+  });
+  const repositories = repositoriesQuery.data;
+  const selectedRepository = useMemo(
+    () => repositories?.find((repository) => repository.id === repositoryId),
+    [repositories, repositoryId],
+  );
+
+  useEffect(() => {
+    if (repositories === undefined) return;
+    if (repositories.length === 0) {
+      if (repositoryId !== null) setRepositoryId(null);
+      return;
+    }
+    if (
+      repositoryId === null ||
+      !repositories.some((repository) => repository.id === repositoryId)
+    ) {
+      setRepositoryId(repositories[0]?.id ?? null);
+    }
+  }, [repositories, repositoryId, setRepositoryId]);
+
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (repositoryId !== null) params.set('repo', repositoryId);
+    if (ref !== 'HEAD') params.set('ref', ref);
+    if (commitHash !== null) params.set('commit', commitHash);
+    const query = params.toString();
+    window.history.replaceState(null, '', query === '' ? window.location.pathname : `?${query}`);
+  }, [repositoryId, ref, commitHash]);
+
+  const registerError =
+    registerMutation.error instanceof Error ? registerMutation.error.message : null;
+  const handleRemove = (repository: Repository): void => {
+    if (window.confirm(`移除“${repository.name}”的注册？磁盘上的仓库不会被删除。`)) {
+      removeMutation.mutate(repository);
+    }
+  };
 
   return (
     <div className="app-shell">
@@ -24,7 +100,7 @@ function App() {
           </div>
         </div>
         <div className="toolbar-group">
-          <button className="toolbar-button" type="button" disabled>
+          <button className="toolbar-button" type="button" onClick={() => setRegisterOpen(true)}>
             <span>＋</span> 注册仓库
           </button>
           <button className="toolbar-button" type="button" disabled>
@@ -39,54 +115,58 @@ function App() {
 
       <main className="workspace">
         <aside className="locations-column">
-          <Panel
-            title="LOCATIONS"
-            action={
-              <button className="panel-action" type="button">
-                ⌕
-              </button>
-            }
-          >
-            <div className="location-section-title">仓库</div>
-            <EmptyState
-              title="还没有注册仓库"
-              description="注册 allowedRoots 内的本地 Git 仓库后，仓库会显示在这里。"
-            />
-          </Panel>
+          <LocationsPanel
+            repositories={repositories}
+            selectedRepositoryId={repositoryId}
+            locations={locationsQuery.data?.locations}
+            loading={locationsQuery.isPending}
+            onSelectRepository={setRepositoryId}
+            onSelectRef={setRef}
+            onRegister={() => setRegisterOpen(true)}
+            onRemove={handleRemove}
+          />
         </aside>
 
         <section className="history-column">
           <div className="view-tabs" role="tablist" aria-label="工作区视图">
             <button
-              className="view-tab view-tab-active"
+              className={`view-tab ${view === 'history' ? 'view-tab-active' : ''}`}
               type="button"
               role="tab"
-              aria-selected="true"
+              aria-selected={view === 'history'}
+              onClick={() => setView('history')}
             >
               HISTORY
             </button>
-            <button className="view-tab" type="button" role="tab" aria-selected="false">
+            <button
+              className={`view-tab ${view === 'working' ? 'view-tab-active' : ''}`}
+              type="button"
+              role="tab"
+              aria-selected={view === 'working'}
+              onClick={() => setView('working')}
+            >
               WORKING COPY
             </button>
           </div>
           <div className="history-content">
-            <EmptyState
-              title="选择一个仓库开始"
-              description="从左侧 Locations 选择仓库，查看提交历史和工作区变更。"
-            />
+            {view === 'history' ? (
+              <HistoryView
+                repositoryId={repositoryId}
+                refName={ref}
+                selectedCommit={commitHash}
+                onSelectCommit={setCommitHash}
+              />
+            ) : (
+              <EmptyState
+                title="Working Copy 即将可用"
+                description="M3 将在这里显示 staged、changes 和 untracked 文件。"
+              />
+            )}
           </div>
         </section>
 
         <aside className="detail-column">
-          <Panel title="SUMMARY">
-            <EmptyState
-              title="暂无选中内容"
-              description="选择提交或文件后，在这里查看摘要和 Diff。"
-            />
-          </Panel>
-          <Panel title="DIFF" className="diff-panel">
-            <div className="diff-placeholder">Diff Viewer</div>
-          </Panel>
+          <SummaryPanel repositoryId={repositoryId} commitHash={commitHash} />
         </aside>
       </main>
 
@@ -95,10 +175,26 @@ function App() {
           <StatusPill tone={health.isSuccess ? 'success' : 'muted'}>
             {health.isPending ? '连接中' : health.isSuccess ? '服务正常' : '服务未连接'}
           </StatusPill>
-          <span>本机模式 · 只监听 127.0.0.1</span>
+          <span>
+            {selectedRepository?.name ?? '未选择仓库'}
+            {statusQuery.data?.status.branch !== null &&
+            statusQuery.data?.status.branch !== undefined
+              ? ` · ${statusQuery.data.status.branch}`
+              : ''}
+            {statusQuery.data?.status.dirty ? ' · 有未提交变更' : ''}
+          </span>
         </div>
-        <div className="statusbar-right">V0.1 · M0</div>
+        <div className="statusbar-right">V0.1 · M2</div>
       </footer>
+
+      {registerOpen && (
+        <RegisterDialog
+          busy={registerMutation.isPending}
+          error={registerError}
+          onClose={() => setRegisterOpen(false)}
+          onSubmit={(path, name) => registerMutation.mutate({ path, name })}
+        />
+      )}
     </div>
   );
 }

@@ -4,6 +4,9 @@ import {
   GitWebUiError,
   type Branch,
   type ChangedFile,
+  type CommitDetail,
+  type CommitPage,
+  type CommitSummary,
   type Locations,
   type Remote,
   type RemoteBranch,
@@ -19,6 +22,7 @@ import {
   type ParsedPorcelainStatus,
 } from './porcelain-parser.js';
 import {
+  validateCommitish,
   validateGitName,
   validateRelativePath,
   validateRepositoryPath,
@@ -41,6 +45,12 @@ export interface GitCommitRecord {
   subject: string;
   body: string;
   decorations: string[];
+}
+
+interface CommitStats {
+  additions: number | null;
+  deletions: number | null;
+  changedFiles: number | null;
 }
 
 export class GitProvider {
@@ -326,13 +336,137 @@ export class GitProvider {
     ref?: string,
     baseRef?: string,
   ): Promise<ChangedFile[]> {
-    const args = ['diff', '--name-status', '-z', '--find-renames'];
+    const args =
+      kind === 'commit'
+        ? [
+            'diff-tree',
+            '--root',
+            '--no-commit-id',
+            '--name-status',
+            '-z',
+            '-r',
+            '--find-renames',
+            ref ?? 'HEAD',
+          ]
+        : ['diff', '--name-status', '-z', '--find-renames'];
     if (kind === 'staged') args.push('--cached');
-    else if (kind === 'commit') args.push(`${ref ?? 'HEAD'}^`, ref ?? 'HEAD');
     else if (kind === 'compare') args.push(`${baseRef ?? 'HEAD'}...${ref ?? 'HEAD'}`);
     args.push('--');
     const result = await this.executeChecked(repositoryPath, args);
     return parseNameStatus(result.stdout);
+  }
+
+  public async getCommitPage(
+    repositoryPath: string,
+    ref: string,
+    offset: number,
+    limit: number,
+  ): Promise<CommitPage> {
+    const safeRef = validateCommitish(ref);
+    const result = await this.executeChecked(repositoryPath, [
+      'log',
+      '--topo-order',
+      '--date-order',
+      `--max-count=${limit + 1}`,
+      `--skip=${offset}`,
+      '--format=%H%x00%P%x00%an%x00%ae%x00%aI%x00%s%x00%b%x00%D%x1e',
+      safeRef,
+      '--',
+    ]);
+    const records = parseCommitRecords(result.stdout);
+    const hasMore = records.length > limit;
+    const pageRecords = records.slice(0, limit);
+    const items = await Promise.all(
+      pageRecords.map(async (record) => {
+        const stats = await this.getCommitStats(repositoryPath, record.hash);
+        return toCommitSummary(record, stats);
+      }),
+    );
+    return {
+      items,
+      nextCursor: hasMore ? String(offset + limit) : null,
+      hasMore,
+    };
+  }
+
+  public async getCommitDetail(repositoryPath: string, commitish: string): Promise<CommitDetail> {
+    const commit = await this.getCommit(repositoryPath, commitish);
+    const [changedFiles, stats] = await Promise.all([
+      this.getChangedFiles(repositoryPath, 'commit', commit.hash),
+      this.getCommitFileStats(repositoryPath, commit.hash),
+    ]);
+    const files = changedFiles.map((file) => {
+      const fileStats = stats.get(file.path);
+      return {
+        ...file,
+        additions: fileStats?.additions ?? null,
+        deletions: fileStats?.deletions ?? null,
+        binary: fileStats?.binary ?? file.binary,
+      };
+    });
+    return {
+      commit: toCommitSummary(commit, {
+        additions: files.reduce((sum, file) => sum + (file.additions ?? 0), 0),
+        deletions: files.reduce((sum, file) => sum + (file.deletions ?? 0), 0),
+        changedFiles: files.length,
+      }),
+      body: commit.body,
+      changedFiles: files,
+    };
+  }
+
+  private async getCommitStats(repositoryPath: string, commitish: string): Promise<CommitStats> {
+    const stats = await this.getCommitFileStats(repositoryPath, commitish);
+    let additions = 0;
+    let deletions = 0;
+    let hasBinary = false;
+    for (const value of stats.values()) {
+      if (value.additions === null || value.deletions === null) {
+        hasBinary = true;
+      } else {
+        additions += value.additions;
+        deletions += value.deletions;
+      }
+    }
+    return {
+      additions: hasBinary ? null : additions,
+      deletions: hasBinary ? null : deletions,
+      changedFiles: stats.size,
+    };
+  }
+
+  private async getCommitFileStats(
+    repositoryPath: string,
+    commitish: string,
+  ): Promise<Map<string, { additions: number | null; deletions: number | null; binary: boolean }>> {
+    const result = await this.executeChecked(repositoryPath, [
+      'diff-tree',
+      '--root',
+      '--no-commit-id',
+      '--numstat',
+      '-z',
+      '-r',
+      '--find-renames',
+      commitish,
+      '--',
+    ]);
+    const stats = new Map<
+      string,
+      { additions: number | null; deletions: number | null; binary: boolean }
+    >();
+    for (const record of result.stdout.split('\0')) {
+      if (record === '') continue;
+      const fields = record.split('\t');
+      if (fields.length < 3) continue;
+      const pathValue = fields.slice(2).join('\t');
+      const binary = fields[0] === '-' || fields[1] === '-';
+      stats.set(pathValue, {
+        additions: binary ? null : Number(fields[0]),
+        deletions: binary ? null : Number(fields[1]),
+        binary,
+      });
+    }
+    return stats;
   }
 
   public async readDiff(
@@ -344,9 +478,19 @@ export class GitProvider {
     maxBytes = 2 * 1024 * 1024,
   ): Promise<{ content: string; binary: boolean; truncated: boolean; bytes: number }> {
     const safePath = validateRelativePath(filePath);
-    const args = ['diff', '--no-ext-diff', '--unified=3'];
+    const args =
+      kind === 'commit'
+        ? [
+            'diff-tree',
+            '--root',
+            '--no-commit-id',
+            '--patch',
+            '--find-renames',
+            '--unified=3',
+            ref ?? 'HEAD',
+          ]
+        : ['diff', '--no-ext-diff', '--unified=3'];
     if (kind === 'staged') args.push('--cached');
-    else if (kind === 'commit') args.push(`${ref ?? 'HEAD'}^`, ref ?? 'HEAD');
     else if (kind === 'compare') args.push(`${baseRef ?? 'HEAD'}...${ref ?? 'HEAD'}`);
     args.push('--', safePath);
     const result = await this.execute(repositoryPath, args);
@@ -373,7 +517,7 @@ export class GitProvider {
   }
 
   public async getCommit(repositoryPath: string, commitish: string): Promise<GitCommitRecord> {
-    validateGitName(commitish, 'ref');
+    validateCommitish(commitish);
     const result = await this.executeChecked(repositoryPath, [
       'show',
       '-s',
@@ -433,3 +577,36 @@ const parseNameStatus = (output: string): ChangedFile[] => {
   }
   return files;
 };
+
+const parseCommitRecords = (output: string): GitCommitRecord[] =>
+  output
+    .split(RECORD_SEPARATOR)
+    .map((record) => record.replace(/^\n/, ''))
+    .filter(Boolean)
+    .map((record) => {
+      const [hash, parents, authorName, authorEmail, authoredAt, subject, body, decorations] =
+        record.split('\0');
+      return {
+        hash: hash ?? '',
+        parents: parents?.split(' ').filter(Boolean) ?? [],
+        authorName: authorName ?? '',
+        authorEmail: authorEmail ?? '',
+        authoredAt: authoredAt ?? '',
+        subject: subject ?? '',
+        body: body ?? '',
+        decorations: decorations?.split(', ').filter(Boolean) ?? [],
+      };
+    });
+
+const toCommitSummary = (record: GitCommitRecord, stats: CommitStats): CommitSummary => ({
+  hash: record.hash,
+  parents: record.parents,
+  authorName: record.authorName,
+  authorEmail: record.authorEmail,
+  authoredAt: record.authoredAt,
+  subject: record.subject,
+  decorations: record.decorations,
+  additions: stats.additions,
+  deletions: stats.deletions,
+  changedFiles: stats.changedFiles,
+});
