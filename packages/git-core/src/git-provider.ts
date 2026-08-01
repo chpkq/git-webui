@@ -27,6 +27,7 @@ import {
   validateGitName,
   validateRelativePath,
   validateRepositoryPath,
+  validateGitUrl,
   type ValidatedRepository,
 } from './path-security.js';
 
@@ -68,7 +69,11 @@ export class GitProvider {
     return await validateRepositoryPath(repositoryPath, this.allowedRoots, this.runner);
   }
 
-  private async execute(repositoryPath: string, args: readonly string[]): Promise<CommandResult> {
+  private async execute(
+    repositoryPath: string,
+    args: readonly string[],
+    onOutput?: (stream: 'stdout' | 'stderr', chunk: string) => void,
+  ): Promise<CommandResult> {
     const validated = await this.validateRepository(repositoryPath);
     return await this.runner.run({
       cwd: validated.path,
@@ -78,14 +83,16 @@ export class GitProvider {
         GIT_TERMINAL_PROMPT: '0',
         GCM_INTERACTIVE: 'Never',
       },
+      onOutput,
     });
   }
 
   private async executeChecked(
     repositoryPath: string,
     args: readonly string[],
+    onOutput?: (stream: 'stdout' | 'stderr', chunk: string) => void,
   ): Promise<CommandResult> {
-    const result = await this.execute(repositoryPath, args);
+    const result = await this.execute(repositoryPath, args, onOutput);
     if (result.exitCode !== 0) {
       throw this.mapCommandFailure(result);
     }
@@ -128,6 +135,142 @@ export class GitProvider {
     const parsed = parsePorcelainV2(result.stdout);
     const inProgress = await this.getInProgressState(repositoryPath);
     return toRepositoryStatus(parsed, inProgress);
+  }
+
+  public async fetchAllPrune(
+    repositoryPath: string,
+    onProgress?: (text: string) => void,
+  ): Promise<void> {
+    await this.executeChecked(
+      repositoryPath,
+      ['fetch', '--all', '--prune', '--progress'],
+      (_stream, chunk) => {
+        onProgress?.(chunk.trim());
+      },
+    );
+  }
+
+  public async pullFastForwardOnly(
+    repositoryPath: string,
+    onProgress?: (text: string) => void,
+  ): Promise<void> {
+    await this.executeChecked(
+      repositoryPath,
+      ['pull', '--ff-only', '--progress'],
+      (_stream, chunk) => {
+        onProgress?.(chunk.trim());
+      },
+    );
+  }
+
+  public async pushExplicit(
+    repositoryPath: string,
+    remote: string,
+    branch: string,
+    setUpstream: boolean,
+    onProgress?: (text: string) => void,
+  ): Promise<void> {
+    validateGitName(remote, 'remote');
+    validateGitName(branch, 'branch');
+    const args = ['push', '--progress'];
+    if (setUpstream) args.push('--set-upstream');
+    args.push(remote, branch);
+    await this.executeChecked(repositoryPath, args, (_stream, chunk) => {
+      onProgress?.(chunk.trim());
+    });
+  }
+
+  public async addRemote(
+    repositoryPath: string,
+    name: string,
+    fetchUrl: string,
+    pushUrl?: string,
+  ): Promise<void> {
+    validateGitName(name, 'remote');
+    validateGitUrl(fetchUrl);
+    await this.executeChecked(repositoryPath, ['remote', 'add', name, fetchUrl]);
+    if (pushUrl !== undefined && pushUrl !== fetchUrl) {
+      validateGitUrl(pushUrl);
+      await this.executeChecked(repositoryPath, ['remote', 'set-url', '--push', name, pushUrl]);
+    }
+  }
+
+  public async setRemoteUrl(
+    repositoryPath: string,
+    name: string,
+    url: string,
+    push: boolean,
+  ): Promise<void> {
+    validateGitName(name, 'remote');
+    validateGitUrl(url);
+    const args = ['remote', 'set-url'];
+    if (push) args.push('--push');
+    args.push(name, url);
+    await this.executeChecked(repositoryPath, args);
+  }
+
+  public async removeRemote(repositoryPath: string, name: string): Promise<void> {
+    validateGitName(name, 'remote');
+    await this.executeChecked(repositoryPath, ['remote', 'remove', name]);
+  }
+
+  public async createBranch(
+    repositoryPath: string,
+    name: string,
+    startPoint?: string,
+  ): Promise<void> {
+    validateGitName(name, 'branch');
+    const args = ['branch', name];
+    if (startPoint !== undefined) args.push(validateCommitish(startPoint));
+    await this.executeChecked(repositoryPath, args);
+  }
+
+  public async switchBranch(repositoryPath: string, name: string): Promise<void> {
+    validateGitName(name, 'branch');
+    const status = await this.getStatus(repositoryPath);
+    if (status.inProgress.length > 0) {
+      throw new GitWebUiError('GIT_IN_PROGRESS', '仓库存在进行中的 Git 状态，不能切换分支。');
+    }
+    if (status.dirty) throw new GitWebUiError('DIRTY_WORKTREE', '工作区不干净，不能切换分支。');
+    await this.executeChecked(repositoryPath, ['switch', name]);
+  }
+
+  public async renameBranch(
+    repositoryPath: string,
+    oldName: string,
+    newName: string,
+  ): Promise<void> {
+    validateGitName(oldName, 'branch');
+    validateGitName(newName, 'branch');
+    await this.executeChecked(repositoryPath, ['branch', '-m', oldName, newName]);
+  }
+
+  public async deleteBranchSafe(repositoryPath: string, name: string): Promise<void> {
+    validateGitName(name, 'branch');
+    const status = await this.getStatus(repositoryPath);
+    if (status.branch === name) throw new GitWebUiError('INVALID_BRANCH', '不能删除当前分支。');
+    const locations = await this.getLocations(repositoryPath);
+    const branch = locations.branches.find((item) => item.name === name);
+    if (branch?.worktreePath !== null && branch?.worktreePath !== undefined) {
+      throw new GitWebUiError('INVALID_BRANCH', '不能删除被其他 Worktree 占用的分支。');
+    }
+    await this.executeChecked(repositoryPath, ['branch', '-d', '--', name]);
+  }
+
+  public async setUpstream(
+    repositoryPath: string,
+    localBranch: string,
+    remote: string,
+    remoteBranch: string,
+  ): Promise<void> {
+    validateGitName(localBranch, 'branch');
+    validateGitName(remote, 'remote');
+    validateGitName(remoteBranch, 'branch');
+    await this.executeChecked(repositoryPath, [
+      'branch',
+      `--set-upstream-to=${remote}/${remoteBranch}`,
+      localBranch,
+    ]);
   }
 
   private async getParsedStatus(repositoryPath: string): Promise<ParsedPorcelainStatus> {

@@ -4,16 +4,26 @@ import type { HealthResponse, Repository } from '@git-webui/shared';
 import { StatusPill } from '@git-webui/ui-components';
 import {
   apiRequest,
+  getAuthSession,
   getRepositoryLocations,
   getRepositoryStatus,
   listRepositories,
   registerRepository,
   removeRepository,
+  runManagement,
+  runSync,
+  login,
+  logout,
+  type ManagementAction,
 } from './api.js';
 import { HistoryView } from './history-view.js';
 import { LocationsPanel } from './locations-panel.js';
 import { RegisterDialog } from './register-dialog.js';
 import { SummaryPanel } from './summary-panel.js';
+import { OperationLog } from './operation-log.js';
+import { SyncDialog, type SyncAction } from './sync-dialog.js';
+import { ManagementDialog } from './management-dialog.js';
+import { LoginPanel } from './login-panel.js';
 import { WorkingCopyView } from './working-copy-view.js';
 import { useWorkspaceStore } from './workspace-store.js';
 
@@ -23,19 +33,29 @@ const fetchHealth = async (): Promise<HealthResponse> =>
 function App() {
   const queryClient = useQueryClient();
   const [registerOpen, setRegisterOpen] = useState(false);
+  const [syncAction, setSyncAction] = useState<SyncAction | null>(null);
+  const [managementOpen, setManagementOpen] = useState(false);
   const { repositoryId, ref, commitHash, view, setRepositoryId, setRef, setCommitHash, setView } =
     useWorkspaceStore();
+  const authQuery = useQuery({ queryKey: ['auth'], queryFn: getAuthSession, staleTime: 60_000 });
+  const authenticated = authQuery.data?.authenticated === true;
+  const role = authQuery.data?.role ?? 'admin';
+  const appEnabled = authQuery.data !== undefined && (!authQuery.data.enabled || authenticated);
   const health = useQuery({ queryKey: ['health'], queryFn: fetchHealth, refetchInterval: 10_000 });
-  const repositoriesQuery = useQuery({ queryKey: ['repositories'], queryFn: listRepositories });
+  const repositoriesQuery = useQuery({
+    queryKey: ['repositories'],
+    queryFn: listRepositories,
+    enabled: appEnabled,
+  });
   const locationsQuery = useQuery({
     queryKey: ['locations', repositoryId],
     queryFn: () => getRepositoryLocations(repositoryId!),
-    enabled: repositoryId !== null,
+    enabled: appEnabled && repositoryId !== null,
   });
   const statusQuery = useQuery({
     queryKey: ['status', repositoryId],
     queryFn: () => getRepositoryStatus(repositoryId!),
-    enabled: repositoryId !== null,
+    enabled: appEnabled && repositoryId !== null,
     refetchInterval: 3000,
   });
   const registerMutation = useMutation({
@@ -46,11 +66,45 @@ function App() {
       setRegisterOpen(false);
     },
   });
+  const loginMutation = useMutation({
+    mutationFn: login,
+    onSuccess: () => void authQuery.refetch(),
+  });
+  const logoutMutation = useMutation({
+    mutationFn: logout,
+    onSuccess: () => {
+      void queryClient.clear();
+      void authQuery.refetch();
+    },
+  });
   const removeMutation = useMutation({
     mutationFn: (repository: Repository) => removeRepository(repository.id),
     onSuccess: (_result, repository) => {
       if (repository.id === repositoryId) setRepositoryId(null);
       void queryClient.invalidateQueries({ queryKey: ['repositories'] });
+    },
+  });
+  const syncMutation = useMutation({
+    mutationFn: ({ action, target }: { action: SyncAction; target: Record<string, unknown> }) =>
+      runSync(repositoryId!, action, target),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['status', repositoryId] });
+      void queryClient.invalidateQueries({ queryKey: ['locations', repositoryId] });
+      void queryClient.invalidateQueries({ queryKey: ['commits', repositoryId] });
+    },
+  });
+  const managementMutation = useMutation({
+    mutationFn: ({
+      action,
+      target,
+    }: {
+      action: ManagementAction;
+      target: Record<string, unknown>;
+    }) => runManagement(repositoryId!, action, target),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['status', repositoryId] });
+      void queryClient.invalidateQueries({ queryKey: ['locations', repositoryId] });
+      void queryClient.invalidateQueries({ queryKey: ['commits', repositoryId] });
     },
   });
   const repositories = repositoriesQuery.data;
@@ -90,6 +144,24 @@ function App() {
     }
   };
 
+  if (authQuery.isPending)
+    return <div className="center-state app-loading-state">验证服务状态…</div>;
+  if (authQuery.isError)
+    return (
+      <div className="center-state center-state-error app-loading-state">
+        {authQuery.error.message}
+      </div>
+    );
+  if (authQuery.data?.enabled && !authenticated) {
+    return (
+      <LoginPanel
+        busy={loginMutation.isPending}
+        error={loginMutation.error instanceof Error ? loginMutation.error.message : null}
+        onSubmit={(password) => loginMutation.mutate(password)}
+      />
+    );
+  }
+
   return (
     <div className="app-shell">
       <header className="topbar">
@@ -101,12 +173,48 @@ function App() {
           </div>
         </div>
         <div className="toolbar-group">
-          <button className="toolbar-button" type="button" onClick={() => setRegisterOpen(true)}>
+          <button
+            className="toolbar-button"
+            type="button"
+            onClick={() => setRegisterOpen(true)}
+            disabled={role === 'viewer'}
+          >
             <span>＋</span> 注册仓库
           </button>
-          <button className="toolbar-button" type="button" disabled>
+          <button
+            className="toolbar-button"
+            type="button"
+            disabled={repositoryId === null || role === 'viewer'}
+            onClick={() => setSyncAction('fetch')}
+          >
             更新
           </button>
+          <button
+            className="toolbar-button"
+            type="button"
+            disabled={repositoryId === null || role === 'viewer'}
+            onClick={() => setSyncAction('pull')}
+          >
+            Pull
+          </button>
+          <button
+            className="toolbar-button"
+            type="button"
+            disabled={repositoryId === null || role === 'viewer'}
+            onClick={() => setSyncAction('push')}
+          >
+            Push
+          </button>
+          {authQuery.data?.enabled && (
+            <button
+              className="toolbar-button"
+              type="button"
+              onClick={() => logoutMutation.mutate()}
+              disabled={logoutMutation.isPending}
+            >
+              退出
+            </button>
+          )}
           <div className="toolbar-divider" />
           <button className="icon-button" type="button" aria-label="设置" disabled>
             ⚙
@@ -124,7 +232,12 @@ function App() {
             onSelectRepository={setRepositoryId}
             onSelectRef={setRef}
             onRegister={() => setRegisterOpen(true)}
+            onManage={() => {
+              managementMutation.reset();
+              setManagementOpen(true);
+            }}
             onRemove={handleRemove}
+            role={role}
           />
         </aside>
 
@@ -163,6 +276,7 @@ function App() {
                 status={statusQuery.data?.status}
                 loading={statusQuery.isPending}
                 error={statusQuery.isError ? statusQuery.error.message : null}
+                canWrite={role !== 'viewer'}
               />
             )}
           </div>
@@ -170,6 +284,7 @@ function App() {
 
         <aside className="detail-column">
           <SummaryPanel repositoryId={repositoryId} commitHash={commitHash} />
+          <OperationLog repositoryId={repositoryId} />
         </aside>
       </main>
 
@@ -187,7 +302,7 @@ function App() {
             {statusQuery.data?.status.dirty ? ' · 有未提交变更' : ''}
           </span>
         </div>
-        <div className="statusbar-right">V0.1 · M2</div>
+        <div className="statusbar-right">V0.1 · M6</div>
       </footer>
 
       {registerOpen && (
@@ -196,6 +311,40 @@ function App() {
           error={registerError}
           onClose={() => setRegisterOpen(false)}
           onSubmit={(path, name) => registerMutation.mutate({ path, name })}
+        />
+      )}
+      {syncAction !== null && selectedRepository !== undefined && (
+        <SyncDialog
+          action={syncAction}
+          repositoryName={selectedRepository.name}
+          status={statusQuery.data?.status}
+          locations={locationsQuery.data?.locations}
+          operation={syncMutation.data}
+          busy={syncMutation.isPending}
+          error={syncMutation.error instanceof Error ? syncMutation.error.message : null}
+          onClose={() => {
+            syncMutation.reset();
+            setSyncAction(null);
+          }}
+          onSubmit={(target) => syncMutation.mutate({ action: syncAction, target })}
+        />
+      )}
+      {managementOpen && selectedRepository !== undefined && (
+        <ManagementDialog
+          repositoryName={selectedRepository.name}
+          locations={locationsQuery.data?.locations}
+          status={statusQuery.data?.status}
+          operation={managementMutation.data}
+          busy={managementMutation.isPending}
+          error={
+            managementMutation.error instanceof Error ? managementMutation.error.message : null
+          }
+          role={role}
+          onClose={() => {
+            managementMutation.reset();
+            setManagementOpen(false);
+          }}
+          onSubmit={(action, target) => managementMutation.mutate({ action, target })}
         />
       )}
     </div>

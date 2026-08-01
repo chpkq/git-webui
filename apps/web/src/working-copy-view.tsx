@@ -10,6 +10,7 @@ interface WorkingCopyViewProps {
   status: RepositoryStatus | undefined;
   loading: boolean;
   error: string | null;
+  canWrite: boolean;
 }
 
 const entryLabel = (entry: FileStatus): string => {
@@ -31,7 +32,15 @@ const languageForPath = (filePath: string): string => {
   return 'plaintext';
 };
 
-const DiffPane = ({ repositoryId, entry }: { repositoryId: string; entry: FileStatus }) => {
+const DiffPane = ({
+  repositoryId,
+  entry,
+  sideBySide,
+}: {
+  repositoryId: string;
+  entry: FileStatus;
+  sideBySide: boolean;
+}) => {
   const kind = entry.staged && !entry.unstaged ? 'staged' : 'working';
   const diffQuery = useQuery({
     queryKey: ['diff', repositoryId, kind, entry.path],
@@ -59,7 +68,7 @@ const DiffPane = ({ repositoryId, entry }: { repositoryId: string; entry: FileSt
         theme="vs-dark"
         options={{
           readOnly: true,
-          renderSideBySide: false,
+          renderSideBySide: sideBySide,
           minimap: { enabled: false },
           wordWrap: 'on',
         }}
@@ -103,9 +112,19 @@ const FileGroup = ({
   </div>
 );
 
-export const WorkingCopyView = ({ repositoryId, status, loading, error }: WorkingCopyViewProps) => {
+export const WorkingCopyView = ({
+  repositoryId,
+  status,
+  loading,
+  error,
+  canWrite,
+}: WorkingCopyViewProps) => {
   const queryClient = useQueryClient();
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
+  const [sideBySide, setSideBySide] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return window.localStorage.getItem('git-webui-diff-layout') === 'split';
+  });
   const entries = useMemo(
     () => status?.entries.filter((entry) => entry.kind !== 'ignored') ?? [],
     [status],
@@ -125,6 +144,13 @@ export const WorkingCopyView = ({ repositoryId, status, loading, error }: Workin
       void queryClient.invalidateQueries({ queryKey: ['diff', repositoryId] });
     },
   });
+
+  const submitStage = (action: 'stage' | 'unstage', paths: string[]): void => {
+    if (!canWrite || paths.length === 0) return;
+    const verb = action === 'stage' ? 'Stage' : 'Unstage';
+    if (!window.confirm(`${verb} ${paths.length} 个文件？`)) return;
+    stageMutation.mutate({ action, paths });
+  };
 
   useEffect(() => {
     if (selectedPath !== null && entries.some((entry) => entry.path === selectedPath)) return;
@@ -148,9 +174,12 @@ export const WorkingCopyView = ({ repositoryId, status, loading, error }: Workin
           <button
             className="small-action-button"
             type="button"
-            disabled={stageMutation.isPending || changes.length === 0}
+            disabled={!canWrite || stageMutation.isPending || changes.length === 0}
             onClick={() =>
-              stageMutation.mutate({ action: 'stage', paths: changes.map((entry) => entry.path) })
+              submitStage(
+                'stage',
+                changes.map((entry) => entry.path),
+              )
             }
           >
             Stage All
@@ -158,9 +187,12 @@ export const WorkingCopyView = ({ repositoryId, status, loading, error }: Workin
           <button
             className="small-action-button"
             type="button"
-            disabled={stageMutation.isPending || staged.length === 0}
+            disabled={!canWrite || stageMutation.isPending || staged.length === 0}
             onClick={() =>
-              stageMutation.mutate({ action: 'unstage', paths: staged.map((entry) => entry.path) })
+              submitStage(
+                'unstage',
+                staged.map((entry) => entry.path),
+              )
             }
           >
             Unstage All
@@ -193,21 +225,34 @@ export const WorkingCopyView = ({ repositoryId, status, loading, error }: Workin
           <>
             <div className="diff-header">
               <span>{selectedEntry.path}</span>
-              <button
-                className="small-action-button"
-                type="button"
-                disabled={stageMutation.isPending}
-                onClick={() =>
-                  stageMutation.mutate({
-                    action: selectedEntry.staged ? 'unstage' : 'stage',
-                    paths: [selectedEntry.path],
-                  })
-                }
-              >
-                {selectedEntry.staged ? 'Unstage' : 'Stage'}
-              </button>
+              <span className="diff-header-actions">
+                <button
+                  className="small-action-button"
+                  type="button"
+                  onClick={() => {
+                    const next = !sideBySide;
+                    setSideBySide(next);
+                    window.localStorage.setItem(
+                      'git-webui-diff-layout',
+                      next ? 'split' : 'unified',
+                    );
+                  }}
+                >
+                  {sideBySide ? 'Unified' : 'Split'}
+                </button>
+                <button
+                  className="small-action-button"
+                  type="button"
+                  disabled={!canWrite || stageMutation.isPending}
+                  onClick={() =>
+                    submitStage(selectedEntry.staged ? 'unstage' : 'stage', [selectedEntry.path])
+                  }
+                >
+                  {selectedEntry.staged ? 'Unstage' : 'Stage'}
+                </button>
+              </span>
             </div>
-            <DiffPane repositoryId={repositoryId} entry={selectedEntry} />
+            <DiffPane repositoryId={repositoryId} entry={selectedEntry} sideBySide={sideBySide} />
           </>
         )}
       </div>

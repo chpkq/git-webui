@@ -46,6 +46,11 @@ export class AppDatabase {
         created_at TEXT NOT NULL
       );
     `);
+    try {
+      this.connection.exec('ALTER TABLE operations ADD COLUMN progress_json TEXT');
+    } catch {
+      // 已有数据库完成过该迁移时，SQLite 会报告重复列，继续使用现有列。
+    }
   }
 
   public close(): void {

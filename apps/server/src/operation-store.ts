@@ -1,6 +1,7 @@
 import {
   GitWebUiError,
   type Operation,
+  type OperationProgress,
   type OperationStatus,
   type OperationType,
   type PreflightSnapshot,
@@ -16,6 +17,7 @@ interface OperationRow {
   preflight_json: string | null;
   result_json: string | null;
   error_json: string | null;
+  progress_json: string | null;
   created_at: string;
   started_at: string | null;
   finished_at: string | null;
@@ -33,6 +35,7 @@ const toOperation = (row: OperationRow): Operation => ({
   preflight: parseObject<PreflightSnapshot>(row.preflight_json),
   result: parseObject<Record<string, unknown>>(row.result_json),
   error: parseObject<{ code: string; message: string }>(row.error_json),
+  progress: parseObject<OperationProgress>(row.progress_json),
   createdAt: row.created_at,
   startedAt: row.started_at,
   finishedAt: row.finished_at,
@@ -117,6 +120,13 @@ export class OperationStore {
         new Date().toISOString(),
         id,
       );
+    return this.get(id);
+  }
+
+  public setProgress(id: string, progress: OperationProgress): Operation {
+    this.database.connection
+      .prepare('UPDATE operations SET progress_json = ? WHERE id = ?')
+      .run(JSON.stringify(progress), id);
     return this.get(id);
   }
 

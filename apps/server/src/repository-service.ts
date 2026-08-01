@@ -7,6 +7,7 @@ import {
   type Locations,
   type Repository,
   type RepositoryStatus,
+  type UserRole,
 } from '@git-webui/shared';
 import type { GitProvider } from '@git-webui/git-core';
 import type { RegisterRepositoryInput } from '@git-webui/shared';
@@ -17,6 +18,7 @@ export class RepositoryService {
   public constructor(
     private readonly store: RepositoryStore,
     private readonly gitProvider: GitProvider,
+    private readonly role: UserRole = 'admin',
   ) {}
 
   public list(): Repository[] {
@@ -24,6 +26,7 @@ export class RepositoryService {
   }
 
   public async register(input: RegisterRepositoryInput): Promise<Repository> {
+    this.assertCanWrite();
     const validated = await this.gitProvider.validateRepository(input.path);
     if (this.store.getByPath(validated.path) !== null) {
       throw new GitWebUiError('INVALID_REQUEST', '该 Git 仓库已经注册。');
@@ -35,6 +38,7 @@ export class RepositoryService {
   }
 
   public remove(id: string): void {
+    this.assertCanWrite();
     if (!this.store.remove(id)) {
       throw new GitWebUiError('NOT_FOUND', '注册的仓库不存在。');
     }
@@ -125,5 +129,11 @@ export class RepositoryService {
         lines: result.content === '' ? 0 : result.content.split('\n').length,
       },
     };
+  }
+
+  private assertCanWrite(): void {
+    if (this.role === 'viewer') {
+      throw new GitWebUiError('PERMISSION_DENIED', 'Viewer 角色不能修改仓库注册。');
+    }
   }
 }

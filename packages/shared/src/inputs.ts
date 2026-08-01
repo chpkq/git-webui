@@ -33,3 +33,46 @@ export const pathsMutationSchema = z.object({
 export type PathsMutation = z.infer<typeof pathsMutationSchema>;
 
 export const operationDiffQuerySchema = diffQuerySchema;
+
+export const emptyOperationInputSchema = z.object({}).default({});
+
+export const pushOperationInputSchema = z.object({
+  remote: z.string().min(1).max(256),
+  branch: z.string().min(1).max(512),
+  setUpstream: z.boolean().default(false),
+});
+export type PushOperationInput = z.infer<typeof pushOperationInputSchema>;
+
+export const remoteAddInputSchema = z.object({
+  name: z.string().min(1).max(256),
+  fetchUrl: z.string().min(1).max(4096),
+  pushUrl: z.string().max(4096).optional(),
+});
+export type RemoteAddInput = z.infer<typeof remoteAddInputSchema>;
+
+export const remoteSetUrlInputSchema = z.object({
+  name: z.string().min(1).max(256),
+  url: z.string().min(1).max(4096),
+  push: z.boolean().default(false),
+});
+export type RemoteSetUrlInput = z.infer<typeof remoteSetUrlInputSchema>;
+
+export const remoteRemoveInputSchema = z.object({ name: z.string().min(1).max(256) });
+
+export const branchCreateInputSchema = z.object({
+  name: z.string().min(1).max(512),
+  startPoint: z.string().max(512).optional(),
+});
+export type BranchCreateInput = z.infer<typeof branchCreateInputSchema>;
+
+export const branchSwitchInputSchema = z.object({ name: z.string().min(1).max(512) });
+export const branchRenameInputSchema = z.object({
+  oldName: z.string().min(1).max(512),
+  newName: z.string().min(1).max(512),
+});
+export const branchDeleteInputSchema = z.object({ name: z.string().min(1).max(512) });
+export const branchUpstreamInputSchema = z.object({
+  localBranch: z.string().min(1).max(512),
+  remote: z.string().min(1).max(256),
+  remoteBranch: z.string().min(1).max(512),
+});

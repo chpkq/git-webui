@@ -168,6 +168,12 @@ export const operationTypeSchema = z.enum([
 ]);
 export type OperationType = z.infer<typeof operationTypeSchema>;
 
+export const operationProgressSchema = z.object({
+  text: z.string(),
+  percent: z.number().int().min(0).max(100).nullable(),
+});
+export type OperationProgress = z.infer<typeof operationProgressSchema>;
+
 export const preflightSnapshotSchema = z.object({
   head: z.string().nullable(),
   branch: z.string().nullable(),
@@ -186,6 +192,7 @@ export const operationSchema = z.object({
   preflight: preflightSnapshotSchema.nullable(),
   result: z.record(z.string(), z.unknown()).nullable(),
   error: z.object({ code: z.string(), message: z.string() }).nullable(),
+  progress: operationProgressSchema.nullable(),
   createdAt: z.string().datetime(),
   startedAt: z.string().datetime().nullable(),
   finishedAt: z.string().datetime().nullable(),

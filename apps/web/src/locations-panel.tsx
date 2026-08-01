@@ -1,4 +1,4 @@
-import type { Locations, Repository } from '@git-webui/shared';
+import type { Locations, Repository, UserRole } from '@git-webui/shared';
 import type { ReactNode } from 'react';
 import { EmptyState, Panel } from '@git-webui/ui-components';
 
@@ -10,7 +10,9 @@ interface LocationsPanelProps {
   onSelectRepository: (id: string) => void;
   onSelectRef: (ref: string) => void;
   onRegister: () => void;
+  onManage: () => void;
   onRemove: (repository: Repository) => void;
+  role: UserRole;
 }
 
 const LocationGroup = ({ title, children }: { title: string; children: ReactNode }) => (
@@ -28,14 +30,33 @@ export const LocationsPanel = ({
   onSelectRepository,
   onSelectRef,
   onRegister,
+  onManage,
   onRemove,
+  role,
 }: LocationsPanelProps) => (
   <Panel
     title="LOCATIONS"
     action={
-      <button className="panel-action" type="button" onClick={onRegister}>
-        ＋
-      </button>
+      <span className="panel-actions">
+        <button
+          className="panel-action"
+          type="button"
+          onClick={onManage}
+          disabled={selectedRepositoryId === null || role === 'viewer'}
+          title="管理 Remote 与 Branch"
+        >
+          ⚙
+        </button>
+        <button
+          className="panel-action"
+          type="button"
+          onClick={onRegister}
+          disabled={role === 'viewer'}
+          title="注册仓库"
+        >
+          ＋
+        </button>
+      </span>
     }
   >
     <div className="repository-list">
@@ -64,14 +85,16 @@ export const LocationsPanel = ({
                 <small>{repository.path}</small>
               </span>
             </button>
-            <button
-              className="repository-remove"
-              type="button"
-              title="移除注册（不会删除磁盘仓库）"
-              onClick={() => onRemove(repository)}
-            >
-              ×
-            </button>
+            {role !== 'viewer' && (
+              <button
+                className="repository-remove"
+                type="button"
+                title="移除注册（不会删除磁盘仓库）"
+                onClick={() => onRemove(repository)}
+              >
+                ×
+              </button>
+            )}
           </div>
         ))
       )}

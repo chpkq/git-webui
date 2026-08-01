@@ -5,13 +5,20 @@ export default defineConfig({
   fullyParallel: true,
   reporter: 'html',
   use: {
-    baseURL: 'http://127.0.0.1:4173',
+    baseURL: 'http://127.0.0.1:5173',
     trace: 'on-first-retry',
   },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
-  webServer: {
-    command: 'pnpm --filter @git-webui/web preview --host 127.0.0.1',
-    url: 'http://127.0.0.1:4173',
-    reuseExistingServer: true,
-  },
+  webServer: [
+    {
+      command: 'corepack pnpm --filter @git-webui/server start',
+      url: 'http://127.0.0.1:3000/health',
+      reuseExistingServer: true,
+    },
+    {
+      command: 'corepack pnpm --filter @git-webui/web dev',
+      url: 'http://127.0.0.1:5173',
+      reuseExistingServer: true,
+    },
+  ],
 });

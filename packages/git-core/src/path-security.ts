@@ -56,13 +56,11 @@ export const validateGitName = (value: string, kind: 'ref' | 'remote' | 'branch'
       .split('/')
       .some((segment) => segment === '' || segment === '.' || segment.endsWith('.lock'))
   ) {
-    throw new GitWebUiError(
-      `INVALID_${kind.toUpperCase()}` as 'INVALID_REF',
-      `非法的 ${kind} 名称。`,
-      {
-        value,
-      },
-    );
+    const errorCode =
+      kind === 'ref' ? 'INVALID_REF' : kind === 'remote' ? 'INVALID_REMOTE' : 'INVALID_BRANCH';
+    throw new GitWebUiError(errorCode, `非法的 ${kind} 名称。`, {
+      value,
+    });
   }
   return value;
 };
@@ -76,6 +74,18 @@ export const validateCommitish = (value: string): string => {
     /\s/u.test(value)
   ) {
     throw new GitWebUiError('INVALID_REF', '非法的 commitish。', { value });
+  }
+  return value;
+};
+
+export const validateGitUrl = (value: string): string => {
+  if (
+    value.length === 0 ||
+    value.length > 4096 ||
+    value.includes('\0') ||
+    hasControlCharacters(value)
+  ) {
+    throw new GitWebUiError('INVALID_REQUEST', 'Remote URL 格式不正确。');
   }
   return value;
 };

@@ -106,40 +106,40 @@ Browser
 
 ### M0：工程骨架
 
-- [ ] **BOOT-001** 确定唯一 Git 根目录和远程绑定。
-- [ ] **BOOT-002** 建立 `apps/web`、`apps/server`、`packages/git-core`、`packages/shared`、`packages/ui-components`。
-- [ ] **BOOT-003** 配置 pnpm workspace、TypeScript project references 和统一 scripts。
-- [ ] **BOOT-004** 配置 ESLint、Prettier、Vitest、Playwright 和基础 CI。
-- [ ] **BOOT-005** 建立共享 API error schema、schema 校验和 OpenAPI 生成基线。
-- [ ] **BOOT-006** 实现 Fastify `/health` 与 React 三栏空壳。
-- [ ] **BOOT-007** 记录 ADR-001 至 ADR-006，冻结 V0.1 范围。
+- [x] **BOOT-001** 确定唯一 Git 根目录和远程绑定。
+- [x] **BOOT-002** 建立 `apps/web`、`apps/server`、`packages/git-core`、`packages/shared`、`packages/ui-components`。
+- [x] **BOOT-003** 配置 pnpm workspace、TypeScript project references 和统一 scripts。
+- [x] **BOOT-004** 配置 ESLint、Prettier、Vitest、Playwright 和基础 CI。
+- [x] **BOOT-005** 建立共享 API error schema、schema 校验和 OpenAPI 生成基线。
+- [x] **BOOT-006** 实现 Fastify `/health` 与 React 三栏空壳。
+- [x] **BOOT-007** 记录 ADR-001 至 ADR-006，冻结 V0.1 范围。
 
 **退出门禁**：全新环境可一条命令安装依赖并启动前后端；`/health` 通过；类型检查、lint 和单元测试可运行；三栏 Shell 可正常缩放。
 
 ### M1：Repository 与 Query Core
 
-- [ ] **CORE-001** 实现 `CommandRunner`：`spawn/execFile`、`shell=false`、超时、取消、输出上限、脱敏。
-- [ ] **CORE-002** 实现 `realpath + allowedRoots + rev-parse` 仓库验证，覆盖 symlink 和路径逃逸。
-- [ ] **DATA-001** 建立 SQLite migration：repositories、settings、operations、audit_logs。
-- [ ] **CORE-003** 实现 Repository CRUD，移除注册不删除本地目录。
-- [ ] **CORE-004** 实现 porcelain v2 `-z` parser，支持 staged/unstaged/untracked/rename/conflict。
-- [ ] **CORE-005** 实现 Branch/Remote/Tag/Submodule/Worktree provider。
-- [ ] **CORE-006** 实现 HEAD、upstream、ahead/behind 和进行中 Git 状态检测。
-- [ ] **API-001** 实现 repository/status/locations REST API 和结构化错误。
-- [ ] **TEST-001** 建立临时工作仓库 + bare remote 测试工具。
+- [x] **CORE-001** 实现 `CommandRunner`：`spawn/execFile`、`shell=false`、超时、取消、输出上限、脱敏。
+- [x] **CORE-002** 实现 `realpath + allowedRoots + rev-parse` 仓库验证，覆盖 symlink 和路径逃逸。
+- [x] **DATA-001** 建立 SQLite migration：repositories、settings、operations、audit_logs。
+- [x] **CORE-003** 实现 Repository CRUD，移除注册不删除本地目录。
+- [x] **CORE-004** 实现 porcelain v2 `-z` parser，支持 staged/unstaged/untracked/rename/conflict。
+- [x] **CORE-005** 实现 Branch/Remote/Tag/Submodule/Worktree provider。
+- [x] **CORE-006** 实现 HEAD、upstream、ahead/behind 和进行中 Git 状态检测。
+- [x] **API-001** 实现 repository/status/locations REST API 和结构化错误。
+- [x] **TEST-001** 建立临时工作仓库 + bare remote 测试工具。
 - [ ] **TEST-002** 覆盖空格、中文、rename、detached HEAD、多 Remote、symlink 和恶意 ref。
 
 **退出门禁**：API 与相同仓库上的 Git CLI 结果一致；非 `allowedRoots` 仓库、symlink 逃逸和非法 ref 被稳定拒绝；不存在 shell 字符串拼接。
 
 ### M2：主界面与 Commit History
 
-- [ ] **CORE-007** 实现按 Ref 的 Commit 分页，返回 parents、decorations、stats 和 cursor。
-- [ ] **CORE-008** 实现 Commit Detail 与 changed-files 摘要。
-- [ ] **API-002** 实现 commits/commit-detail API，默认 50 条、上限 200 条。
-- [ ] **WEB-001** 实现顶部工具栏、Locations、History、Detail 和状态栏布局。
-- [ ] **WEB-002** 实现仓库选择、Locations 分组、计数、当前分支标记与 Ref 切换。
-- [ ] **WEB-003** 实现 Commit Timeline、Graph lane、decoration、虚拟列表和无限滚动。
-- [ ] **WEB-004** 实现 Summary，显示 Hash、Author、Date、Parents、stats 和 changed files。
+- [x] **CORE-007** 实现按 Ref 的 Commit 分页，返回 parents、decorations、stats 和 cursor。
+- [x] **CORE-008** 实现 Commit Detail 与 changed-files 摘要。
+- [x] **API-002** 实现 commits/commit-detail API，默认 50 条、上限 200 条。
+- [x] **WEB-001** 实现顶部工具栏、Locations、History、Detail 和状态栏布局。
+- [x] **WEB-002** 实现仓库选择、Locations 分组、计数、当前分支标记与 Ref 切换。
+- [x] **WEB-003** 实现 Commit Timeline、Graph lane、decoration、虚拟列表和无限滚动。
+- [x] **WEB-004** 实现 Summary，显示 Hash、Author、Date、Parents、stats 和 changed files。
 - [ ] **WEB-005** 实现 repo/ref/commit URL 状态、浏览器刷新恢复和面板尺寸保存。
 - [ ] **TEST-003** 建立大历史、merge commit、多 decoration 的性能与组件测试。
 
@@ -147,53 +147,53 @@ Browser
 
 ### M3：Diff、Working Copy 与 Stage
 
-- [ ] **CORE-009** 实现 Working/Staged/Commit/Compare changed-files 查询。
-- [ ] **CORE-010** 实现按 path 加载 Diff，支持 rename、binary、LFS pointer、字节/行数上限。
-- [ ] **CORE-011** 实现 Stage/Unstage 单文件和全部文件，并接入 per-repo queue、日志与审计。
-- [ ] **API-003** 实现 diff/stage/unstage API，路径必须作为独立 argv。
-- [ ] **WEB-006** 实现固定 Working Copy 项和 Staged/Changes/Untracked 分组。
-- [ ] **WEB-007** 接入 Monaco Diff Editor，实现 Split/Unified、文件 tabs 和查看偏好保存。
-- [ ] **WEB-008** 实现 loading、empty、binary、oversize、error 和 truncated 状态。
-- [ ] **WEB-009** 实现 Stage/Unstage 操作确认、禁用状态和完成后精确刷新。
+- [x] **CORE-009** 实现 Working/Staged/Commit/Compare changed-files 查询。
+- [x] **CORE-010** 实现按 path 加载 Diff，支持 rename、binary、LFS pointer、字节/行数上限。
+- [x] **CORE-011** 实现 Stage/Unstage 单文件和全部文件，并接入 per-repo queue、日志与审计。
+- [x] **API-003** 实现 diff/stage/unstage API，路径必须作为独立 argv。
+- [x] **WEB-006** 实现固定 Working Copy 项和 Staged/Changes/Untracked 分组。
+- [x] **WEB-007** 接入 Monaco Diff Editor，实现 Split/Unified、文件 tabs 和查看偏好保存。
+- [x] **WEB-008** 实现 loading、empty、binary、oversize、error 和 truncated 状态。
+- [x] **WEB-009** 实现 Stage/Unstage 操作确认、禁用状态和完成后精确刷新。
 - [ ] **TEST-004** 覆盖中文/空格/换行路径、rename、删除、binary、超大 Diff 和并发 Stage。
 
 **退出门禁**：Working Copy 与任意 Commit 可逐文件审查；Stage/Unstage 结果与 Git CLI 一致；错误操作不会产生部分成功且无提示的 UI 状态。
 
 ### M4：Update、Pull 与 Push
 
-- [ ] **OPS-001** 完善 per-repo Operation Queue，支持 queued/running/success/failed/conflict/cancelled。
-- [ ] **OPS-002** 实现 operationId、preflight snapshot、结构化结果和操作日志持久化。
+- [x] **OPS-001** 完善 per-repo Operation Queue，支持 queued/running/success/failed/conflict/cancelled。
+- [x] **OPS-002** 实现 operationId、preflight snapshot、结构化结果和操作日志持久化。
 - [ ] **OPS-003** 实现 SSE 事件流，处理断线重连和事件去重。
 - [ ] **OPS-004** 实现 `fetch --all --prune --progress`、进度解析和安全取消。
-- [ ] **OPS-005** 实现 Pull preflight 和 `pull --ff-only --progress`。
-- [ ] **OPS-006** 实现 Push 目标显式选择、`--set-upstream`和默认禁止 force。
-- [ ] **OPS-007** 实现 AUTH_REQUIRED、HOST_KEY_REQUIRED、NON_FAST_FORWARD、DIRTY_WORKTREE 等错误映射。
-- [ ] **WEB-010** 实现 Update/Pull/Push 目标摘要、预检、进度、结果与 Operation Log。
+- [x] **OPS-005** 实现 Pull preflight 和 `pull --ff-only --progress`。
+- [x] **OPS-006** 实现 Push 目标显式选择、`--set-upstream`和默认禁止 force。
+- [x] **OPS-007** 实现 AUTH_REQUIRED、HOST_KEY_REQUIRED、NON_FAST_FORWARD、DIRTY_WORKTREE 等错误映射。
+- [x] **WEB-010** 实现 Update/Pull/Push 目标摘要、预检、进度、结果与 Operation Log。
 - [ ] **TEST-005** 覆盖 bare remote、首次 Push、无 upstream、非快进、断网、鉴权失败和多标签页并发。
 
 **退出门禁**：同一仓库的写操作严格串行，不同仓库可并行；网络失败、认证失败、非快进和冲突均不破坏工作区，且 UI 提供可操作的下一步建议。
 
 ### M5：Remote、Branch 与权限
 
-- [ ] **SEC-001** 实现 Viewer/Editor/Admin 权限矩阵和 route/service 双层检查。
-- [ ] **CORE-012** 实现 Remote add/set-url/remove，区分 fetch/push URL 并脱敏。
-- [ ] **CORE-013** 实现 Branch create/switch/rename/delete `-d`/set-upstream。
-- [ ] **CORE-014** 实现当前分支、未合并分支、Worktree 占用、脏工作区的预检。
-- [ ] **API-004** 实现 Remote/Branch REST API，操作目标和影响摘要作为契约一部分。
-- [ ] **WEB-011** 实现 Locations 上下文菜单和 Remote 增删改对话框。
-- [ ] **WEB-012** 实现 Branch 创建/切换/重命名/删除/设置 upstream 对话框。
-- [ ] **WEB-013** 根据权限和 preflight 结果控制入口、禁用原因和二次确认。
+- [x] **SEC-001** 实现 Viewer/Editor/Admin 权限矩阵和 route/service 双层检查。
+- [x] **CORE-012** 实现 Remote add/set-url/remove，区分 fetch/push URL 并脱敏。
+- [x] **CORE-013** 实现 Branch create/switch/rename/delete `-d`/set-upstream。
+- [x] **CORE-014** 实现当前分支、未合并分支、Worktree 占用、脏工作区的预检。
+- [x] **API-004** 实现 Remote/Branch REST API，操作目标和影响摘要作为契约一部分。
+- [x] **WEB-011** 实现 Locations 上下文菜单和 Remote 增删改对话框。
+- [x] **WEB-012** 实现 Branch 创建/切换/重命名/删除/设置 upstream 对话框。
+- [x] **WEB-013** 根据权限和 preflight 结果控制入口、禁用原因和二次确认。
 - [ ] **TEST-006** 覆盖恶意 Remote/Branch 名、当前分支删除、未合并删除、Worktree 占用和越权请求。
 
 **退出门禁**：日常 Remote/Branch 操作可从 Locations 完成；高风险和越权操作被服务端拒绝，不仅是前端隐藏；审计日志不包含凭据。
 
 ### M6：实时刷新、安全与发布
 
-- [ ] **RT-001** 实现活跃仓库 watcher、debounce 和 `repo.changed` SSE。
-- [ ] **RT-002** 实现 status/locations/history/diff 的精确失效，保留定时校准轮询。
-- [ ] **SEC-002** 实现远程模式登录、安全 session/cookie、CSRF 和登录限流。
-- [ ] **SEC-003** 实现远程监听安全门禁，鉴权未就绪时拒绝绑定 `0.0.0.0`。
-- [ ] **SEC-004** 完成凭据、URL、环境变量、stdout/stderr 和 API 响应的脱敏审计。
+- [x] **RT-001** 实现活跃仓库 watcher、debounce 和 `repo.changed` SSE。
+- [x] **RT-002** 实现 status/locations/history/diff 的精确失效，保留定时校准轮询。
+- [x] **SEC-002** 实现远程模式登录、安全 session/cookie、CSRF 和登录限流。
+- [x] **SEC-003** 实现远程监听安全门禁，鉴权未就绪时拒绝绑定 `0.0.0.0`。
+- [x] **SEC-004** 完成凭据、URL、环境变量、stdout/stderr 和 API 响应的脱敏审计。
 - [ ] **TEST-007** 完成 Unit、Integration、API、Frontend、E2E、Concurrency、Failure 分层测试。
 - [ ] **TEST-008** 在 macOS、Linux、Windows 上验证启动、中文路径、Stage/Unstage、Fetch/Pull/Push。
 - [ ] **REL-001** 输出 npm/standalone/Docker 三类运行方式与版本化配置。

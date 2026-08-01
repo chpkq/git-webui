@@ -8,6 +8,7 @@ export interface CommandRunnerOptions {
   maxOutputBytes?: number;
   signal?: AbortSignal;
   env?: NodeJS.ProcessEnv;
+  onOutput?: (stream: 'stdout' | 'stderr', chunk: string) => void;
 }
 
 export interface CommandResult {
@@ -70,6 +71,7 @@ export class CommandRunner {
       }
 
       const collect = (stream: 'stdout' | 'stderr', chunk: Buffer): void => {
+        options.onOutput?.(stream, chunk.toString('utf8'));
         if (stream === 'stdout') {
           stdoutBytes += chunk.byteLength;
         } else {

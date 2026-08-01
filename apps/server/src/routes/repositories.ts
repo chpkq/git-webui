@@ -3,6 +3,7 @@ import {
   commitsQuerySchema,
   diffQuerySchema,
   registerRepositoryInputSchema,
+  type UserRole,
 } from '@git-webui/shared';
 import { GitWebUiError } from '@git-webui/shared';
 import type { RepositoryService } from '../repository-service.js';
@@ -17,19 +18,27 @@ const getRepositoryId = (request: FastifyRequest<{ Params: { id: string } }>): s
 const parseBody = <T>(schema: { parse: (value: unknown) => T }, body: unknown): T =>
   schema.parse(body);
 
+const assertCanWrite = (role: UserRole): void => {
+  if (role === 'viewer')
+    throw new GitWebUiError('PERMISSION_DENIED', 'Viewer 角色不能修改仓库注册。');
+};
+
 export const registerRepositoryRoutes = async (
   app: FastifyInstance,
   service: RepositoryService,
+  role: UserRole,
 ): Promise<void> => {
   app.get('/api/repositories', async () => ({ items: service.list() }));
 
   app.post('/api/repositories', async (request, reply) => {
+    assertCanWrite(role);
     const input = parseBody(registerRepositoryInputSchema, request.body);
     const repository = await service.register(input);
     return await reply.code(201).send(repository);
   });
 
   app.delete<{ Params: { id: string } }>('/api/repositories/:id', async (request, reply) => {
+    assertCanWrite(role);
     service.remove(getRepositoryId(request));
     return await reply.code(204).send();
   });

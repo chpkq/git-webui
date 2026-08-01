@@ -12,6 +12,8 @@ export const errorCodeSchema = z.enum([
   'INVALID_BRANCH',
   'INVALID_PATH',
   'PERMISSION_DENIED',
+  'CSRF_REQUIRED',
+  'RATE_LIMITED',
   'OPERATION_BUSY',
   'DIRTY_WORKTREE',
   'NO_UPSTREAM',

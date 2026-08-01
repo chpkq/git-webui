@@ -12,4 +12,15 @@ describe('readServerConfig', () => {
       '当前版本只允许监听本机回环地址',
     );
   });
+
+  it('allows remote binding only with explicit auth configuration', () => {
+    const config = readServerConfig({
+      GIT_WEBUI_HOST: '0.0.0.0',
+      GIT_WEBUI_ENABLE_REMOTE: 'true',
+      GIT_WEBUI_AUTH_PASSWORD: 'correct horse battery staple',
+      GIT_WEBUI_SESSION_SECRET: '01234567890123456789012345678901',
+      GIT_WEBUI_ROLE: 'editor',
+    });
+    expect(config).toMatchObject({ host: '0.0.0.0', authEnabled: true, role: 'editor' });
+  });
 });
