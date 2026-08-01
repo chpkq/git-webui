@@ -5,6 +5,9 @@ import { AppDatabase } from './database.js';
 import { RepositoryStore } from './repository-store.js';
 import { RepositoryService } from './repository-service.js';
 import { registerRepositoryRoutes } from './routes/repositories.js';
+import { registerOperationRoutes } from './routes/operations.js';
+import { OperationStore } from './operation-store.js';
+import { OperationService } from './operation-service.js';
 import { GitProvider } from '@git-webui/git-core';
 import { GitWebUiError } from '@git-webui/shared';
 import { ZodError } from 'zod';
@@ -15,6 +18,11 @@ export const buildServer = async (config: ServerConfig) => {
   const repositoryService = new RepositoryService(
     new RepositoryStore(database),
     new GitProvider({ allowedRoots: config.allowedRoots }),
+  );
+  const operationService = new OperationService(
+    repositoryService,
+    new GitProvider({ allowedRoots: config.allowedRoots }),
+    new OperationStore(database),
   );
   app.setErrorHandler((error, request, reply) => {
     if (error instanceof GitWebUiError) {
@@ -46,5 +54,6 @@ export const buildServer = async (config: ServerConfig) => {
   app.addHook('onClose', async () => database.close());
   await registerHealthRoutes(app, config);
   await registerRepositoryRoutes(app, repositoryService);
+  await registerOperationRoutes(app, operationService, config.role);
   return app;
 };

@@ -3,12 +3,14 @@ import {
   GitWebUiError,
   type CommitDetail,
   type CommitPage,
+  type DiffResult,
   type Locations,
   type Repository,
   type RepositoryStatus,
 } from '@git-webui/shared';
 import type { GitProvider } from '@git-webui/git-core';
 import type { RegisterRepositoryInput } from '@git-webui/shared';
+import type { DiffQuery } from '@git-webui/shared';
 import type { RepositoryStore } from './repository-store.js';
 
 export class RepositoryService {
@@ -56,6 +58,10 @@ export class RepositoryService {
     return repository;
   }
 
+  public async getValidated(id: string): Promise<Repository> {
+    return await this.validateRegistered(id);
+  }
+
   public async getStatus(
     id: string,
   ): Promise<{ repository: Repository; status: RepositoryStatus }> {
@@ -89,6 +95,35 @@ export class RepositoryService {
     return {
       repository,
       detail: await this.gitProvider.getCommitDetail(repository.path, commitish),
+    };
+  }
+
+  public async getDiff(
+    id: string,
+    query: DiffQuery,
+  ): Promise<{ repository: Repository; diff: DiffResult }> {
+    const repository = await this.validateRegistered(id);
+    const result = await this.gitProvider.readDiff(
+      repository.path,
+      query.kind,
+      query.path,
+      query.ref,
+      query.baseRef,
+      query.maxBytes,
+    );
+    return {
+      repository,
+      diff: {
+        path: query.path,
+        kind: query.kind,
+        content: result.content,
+        binary: result.binary,
+        lfsPointer: result.content.includes('version https://git-lfs.github.com/spec/v1'),
+        truncated: result.truncated,
+        oversize: result.truncated,
+        bytes: result.bytes,
+        lines: result.content === '' ? 0 : result.content.split('\n').length,
+      },
     };
   }
 }

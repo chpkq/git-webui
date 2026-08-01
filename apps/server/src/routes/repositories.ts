@@ -1,5 +1,9 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
-import { commitsQuerySchema, registerRepositoryInputSchema } from '@git-webui/shared';
+import {
+  commitsQuerySchema,
+  diffQuerySchema,
+  registerRepositoryInputSchema,
+} from '@git-webui/shared';
 import { GitWebUiError } from '@git-webui/shared';
 import type { RepositoryService } from '../repository-service.js';
 
@@ -55,4 +59,18 @@ export const registerRepositoryRoutes = async (
     async (request) =>
       await service.getCommitDetail(getRepositoryId(request), request.params.commitish),
   );
+
+  app.get<{
+    Params: { id: string };
+    Querystring: {
+      kind?: string;
+      path?: string;
+      ref?: string;
+      baseRef?: string;
+      maxBytes?: string;
+    };
+  }>('/api/repositories/:id/diff', async (request) => {
+    const query = diffQuerySchema.parse(request.query);
+    return await service.getDiff(getRepositoryId(request), query);
+  });
 };

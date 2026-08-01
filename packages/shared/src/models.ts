@@ -140,3 +140,54 @@ export const diffResultSchema = z.object({
   lines: z.number().int().nonnegative(),
 });
 export type DiffResult = z.infer<typeof diffResultSchema>;
+
+export const operationStatusSchema = z.enum([
+  'queued',
+  'running',
+  'success',
+  'failed',
+  'conflict',
+  'cancelled',
+]);
+export type OperationStatus = z.infer<typeof operationStatusSchema>;
+
+export const operationTypeSchema = z.enum([
+  'stage',
+  'unstage',
+  'fetch',
+  'pull',
+  'push',
+  'remote-add',
+  'remote-set-url',
+  'remote-remove',
+  'branch-create',
+  'branch-switch',
+  'branch-rename',
+  'branch-delete',
+  'branch-set-upstream',
+]);
+export type OperationType = z.infer<typeof operationTypeSchema>;
+
+export const preflightSnapshotSchema = z.object({
+  head: z.string().nullable(),
+  branch: z.string().nullable(),
+  upstream: z.string().nullable(),
+  dirty: z.boolean(),
+  inProgress: z.array(z.string()),
+});
+export type PreflightSnapshot = z.infer<typeof preflightSnapshotSchema>;
+
+export const operationSchema = z.object({
+  id: z.string().uuid(),
+  repositoryId: z.string().uuid(),
+  type: operationTypeSchema,
+  status: operationStatusSchema,
+  target: z.record(z.string(), z.unknown()),
+  preflight: preflightSnapshotSchema.nullable(),
+  result: z.record(z.string(), z.unknown()).nullable(),
+  error: z.object({ code: z.string(), message: z.string() }).nullable(),
+  createdAt: z.string().datetime(),
+  startedAt: z.string().datetime().nullable(),
+  finishedAt: z.string().datetime().nullable(),
+});
+export type Operation = z.infer<typeof operationSchema>;

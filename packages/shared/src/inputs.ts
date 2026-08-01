@@ -31,3 +31,5 @@ export const pathsMutationSchema = z.object({
   paths: z.array(z.string().min(1).max(4096)).min(1).max(500),
 });
 export type PathsMutation = z.infer<typeof pathsMutationSchema>;
+
+export const operationDiffQuerySchema = diffQuerySchema;

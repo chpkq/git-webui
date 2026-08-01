@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { HealthResponse, Repository } from '@git-webui/shared';
-import { EmptyState, StatusPill } from '@git-webui/ui-components';
+import { StatusPill } from '@git-webui/ui-components';
 import {
   apiRequest,
   getRepositoryLocations,
@@ -14,6 +14,7 @@ import { HistoryView } from './history-view.js';
 import { LocationsPanel } from './locations-panel.js';
 import { RegisterDialog } from './register-dialog.js';
 import { SummaryPanel } from './summary-panel.js';
+import { WorkingCopyView } from './working-copy-view.js';
 import { useWorkspaceStore } from './workspace-store.js';
 
 const fetchHealth = async (): Promise<HealthResponse> =>
@@ -157,9 +158,11 @@ function App() {
                 onSelectCommit={setCommitHash}
               />
             ) : (
-              <EmptyState
-                title="Working Copy 即将可用"
-                description="M3 将在这里显示 staged、changes 和 untracked 文件。"
+              <WorkingCopyView
+                repositoryId={repositoryId}
+                status={statusQuery.data?.status}
+                loading={statusQuery.isPending}
+                error={statusQuery.isError ? statusQuery.error.message : null}
               />
             )}
           </div>

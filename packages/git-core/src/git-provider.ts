@@ -1,4 +1,5 @@
 import { access } from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import {
   GitWebUiError,
@@ -493,8 +494,20 @@ export class GitProvider {
     if (kind === 'staged') args.push('--cached');
     else if (kind === 'compare') args.push(`${baseRef ?? 'HEAD'}...${ref ?? 'HEAD'}`);
     args.push('--', safePath);
-    const result = await this.execute(repositoryPath, args);
+    let result = await this.execute(repositoryPath, args);
     if (result.exitCode !== 0 && result.exitCode !== 1) throw this.mapCommandFailure(result);
+    if (kind === 'working' && result.stdout === '') {
+      result = await this.execute(repositoryPath, [
+        'diff',
+        '--no-index',
+        '--no-ext-diff',
+        '--unified=3',
+        '--',
+        os.devNull,
+        safePath,
+      ]);
+      if (result.exitCode !== 0 && result.exitCode !== 1) throw this.mapCommandFailure(result);
+    }
     const content = result.stdout;
     const bytes = Buffer.byteLength(content, 'utf8');
     const binary = content.includes('Binary files') || content.includes('GIT binary patch');

@@ -78,6 +78,65 @@ describe('repository REST API', () => {
         expect.arrayContaining([expect.objectContaining({ path: 'readme.md', additions: 1 })]),
       );
 
+      await writeFile(path.join(repositoryPath, 'readme.md'), '# changed\n');
+      const diff = await app.inject({
+        method: 'GET',
+        url: `/api/repositories/${repository.id}/diff?kind=working&path=readme.md`,
+      });
+      expect(diff.statusCode).toBe(200);
+      expect(diff.json().diff.content).toContain('+# changed');
+
+      const stage = await app.inject({
+        method: 'POST',
+        url: `/api/repositories/${repository.id}/stage`,
+        payload: { paths: ['readme.md'] },
+      });
+      expect(stage.statusCode).toBe(200);
+      expect(stage.json()).toMatchObject({ type: 'stage', status: 'success' });
+      const stagedStatus = await app.inject({
+        method: 'GET',
+        url: `/api/repositories/${repository.id}/status`,
+      });
+      expect(stagedStatus.json().status.entries).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ path: 'readme.md', staged: true, unstaged: false }),
+        ]),
+      );
+
+      const unstage = await app.inject({
+        method: 'POST',
+        url: `/api/repositories/${repository.id}/unstage`,
+        payload: { paths: ['readme.md'] },
+      });
+      expect(unstage.statusCode).toBe(200);
+      expect(unstage.json()).toMatchObject({ type: 'unstage', status: 'success' });
+
+      await writeFile(path.join(repositoryPath, 'one.txt'), 'one\n');
+      await writeFile(path.join(repositoryPath, 'two.txt'), 'two\n');
+      const concurrentResults = await Promise.all([
+        app.inject({
+          method: 'POST',
+          url: `/api/repositories/${repository.id}/stage`,
+          payload: { paths: ['readme.md', 'one.txt'] },
+        }),
+        app.inject({
+          method: 'POST',
+          url: `/api/repositories/${repository.id}/stage`,
+          payload: { paths: ['two.txt'] },
+        }),
+      ]);
+      expect(concurrentResults.map((response) => response.json().status)).toEqual([
+        'success',
+        'success',
+      ]);
+      expect(
+        (
+          await app.inject({ method: 'GET', url: `/api/operations?repositoryId=${repository.id}` })
+        ).json(),
+      ).toEqual(
+        expect.arrayContaining([expect.objectContaining({ status: 'success', type: 'stage' })]),
+      );
+
       const removed = await app.inject({
         method: 'DELETE',
         url: `/api/repositories/${repository.id}`,
@@ -88,7 +147,7 @@ describe('repository REST API', () => {
       await app.close();
       await rm(root, { recursive: true, force: true });
     }
-  });
+  }, 20_000);
 
   it('returns a stable error for a repository outside allowedRoots', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'git-webui-api-root-'));

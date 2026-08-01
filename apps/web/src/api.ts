@@ -1,7 +1,9 @@
 import type {
   CommitDetail,
   CommitPage,
+  DiffResult,
   Locations,
+  Operation,
   Repository,
   RepositoryStatus,
 } from '@git-webui/shared';
@@ -87,3 +89,30 @@ export const getCommitDetail = async (
   await apiRequest<{ repository: Repository; detail: CommitDetail }>(
     `/api/repositories/${encodeURIComponent(id)}/commits/${encodeURIComponent(commitish)}`,
   );
+
+export const getDiff = async (
+  id: string,
+  query: {
+    kind: 'working' | 'staged' | 'commit' | 'compare';
+    path: string;
+    ref?: string;
+    baseRef?: string;
+  },
+): Promise<{ repository: Repository; diff: DiffResult }> => {
+  const params = new URLSearchParams({ kind: query.kind, path: query.path });
+  if (query.ref !== undefined) params.set('ref', query.ref);
+  if (query.baseRef !== undefined) params.set('baseRef', query.baseRef);
+  return await apiRequest<{ repository: Repository; diff: DiffResult }>(
+    `/api/repositories/${encodeURIComponent(id)}/diff?${params.toString()}`,
+  );
+};
+
+export const runStage = async (
+  id: string,
+  action: 'stage' | 'unstage',
+  paths: string[],
+): Promise<Operation> =>
+  await apiRequest<Operation>(`/api/repositories/${encodeURIComponent(id)}/${action}`, {
+    method: 'POST',
+    body: JSON.stringify({ paths }),
+  });

@@ -52,6 +52,8 @@ describe('GitProvider', () => {
       expect(detail.changedFiles).toEqual(
         expect.arrayContaining([expect.objectContaining({ path: 'readme.txt', additions: 1 })]),
       );
+      const untrackedDiff = await provider.readDiff(repositoryPath, 'working', '未跟踪\n文件.txt');
+      expect(untrackedDiff.content).toContain('new file mode');
     } finally {
       await rm(root, { recursive: true, force: true });
     }

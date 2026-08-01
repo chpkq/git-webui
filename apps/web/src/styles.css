@@ -819,3 +819,150 @@ button:disabled {
   color: #9aa6b7;
   background: transparent;
 }
+
+.working-copy-layout {
+  display: grid;
+  height: 100%;
+  min-height: 0;
+  grid-template-columns: minmax(220px, 0.38fr) minmax(300px, 0.62fr);
+}
+
+.working-sidebar {
+  min-width: 0;
+  overflow: auto;
+  border-right: 1px solid #2b323d;
+}
+
+.working-toolbar,
+.diff-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 8px;
+  border-bottom: 1px solid #2b323d;
+  background: #171c23;
+}
+
+.small-action-button {
+  padding: 5px 7px;
+  border: 1px solid #364352;
+  border-radius: 4px;
+  color: #9aaccb;
+  background: #1b2635;
+  font-size: 10px;
+}
+
+.small-action-button:hover:not(:disabled) {
+  border-color: #5979bd;
+  background: #223452;
+}
+
+.working-error {
+  margin: 8px;
+  padding: 8px;
+  border: 1px solid #57363d;
+  color: #d89292;
+  background: #2b2027;
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.working-group {
+  padding-bottom: 8px;
+}
+
+.working-group-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px 5px;
+  color: #68778b;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+}
+
+.working-empty {
+  padding: 6px 12px;
+  color: #4f5c6d;
+  font-size: 10px;
+}
+
+.working-file-row {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  border: 0;
+  color: #9eabbc;
+  background: transparent;
+  font-size: 11px;
+  text-align: left;
+}
+
+.working-file-row:hover,
+.working-file-row-selected {
+  background: #1d2734;
+  color: #d2dbe8;
+}
+
+.working-file-path {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.working-file-state {
+  color: #6b7a8f;
+  font-size: 9px;
+}
+
+.file-status-untracked {
+  color: #a7c58c;
+  background: #2c412b;
+}
+
+.file-status-conflict {
+  color: #e0a5a5;
+  background: #4b2e36;
+}
+
+.working-diff-pane {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  background: #10151b;
+}
+
+.diff-header {
+  min-height: 37px;
+  justify-content: space-between;
+  color: #9facbc;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+}
+
+.monaco-diff {
+  min-height: 0;
+  flex: 1;
+}
+
+.diff-state {
+  display: grid;
+  min-height: 160px;
+  flex: 1;
+  place-items: center;
+  padding: 20px;
+  color: #697687;
+  font-size: 11px;
+  text-align: center;
+}
+
+.diff-state-error {
+  color: #d89292;
+}
