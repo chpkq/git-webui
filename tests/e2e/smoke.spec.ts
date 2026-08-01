@@ -1,6 +1,8 @@
 import { test, expect } from '@playwright/test';
 import path from 'node:path';
 
+const E2E_SERVER_URL = 'http://127.0.0.1:3100';
+
 test.describe.configure({ mode: 'serial' });
 
 test('首页显示 Git WebUI 工作台', async ({ page }) => {
@@ -57,7 +59,7 @@ test('注册仓库并查看 Working Copy', async ({ page }) => {
     await expect(page.getByText('还没有注册仓库')).toBeVisible();
   } finally {
     if (registeredId !== undefined) {
-      await fetch(`http://127.0.0.1:3000/api/repositories/${registeredId}`, {
+      await fetch(`${E2E_SERVER_URL}/api/repositories/${registeredId}`, {
         method: 'DELETE',
       }).catch(() => undefined);
     }
