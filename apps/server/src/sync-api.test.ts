@@ -17,7 +17,7 @@ const setupRepository = async (
   const repositoryPath = path.join(root, 'repository');
   const remotePath = path.join(root, 'remote.git');
   await mkdir(repositoryPath);
-  await runGit(root, ['init', '--bare', remotePath]);
+  await runGit(root, ['init', '--bare', '--initial-branch=main', remotePath]);
   await runGit(repositoryPath, ['init', '-b', 'main']);
   await runGit(repositoryPath, ['config', 'user.name', '同步测试']);
   await runGit(repositoryPath, ['config', 'user.email', 'sync@example.com']);

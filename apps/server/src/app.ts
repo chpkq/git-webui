@@ -95,7 +95,7 @@ export const buildServer = async (config: ServerConfig) => {
     });
   });
   app.addHook('onClose', async () => {
-    repositoryWatcher.stop();
+    await repositoryWatcher.stop();
     database.close();
   });
   await registerHealthRoutes(app, config);

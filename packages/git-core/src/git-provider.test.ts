@@ -25,7 +25,9 @@ describe('GitProvider', () => {
       await runGit(repositoryPath, ['commit', '-m', '初始提交']);
       await runGit(repositoryPath, ['mv', '--', '中文 文件.txt', '重命名 文件.txt']);
       await writeFile(path.join(repositoryPath, 'readme.txt'), 'changed\n');
-      await writeFile(path.join(repositoryPath, '未跟踪\n文件.txt'), 'untracked\n');
+      const untrackedFilePath =
+        process.platform === 'win32' ? '未跟踪 文件.txt' : '未跟踪\n文件.txt';
+      await writeFile(path.join(repositoryPath, untrackedFilePath), 'untracked\n');
 
       const provider = new GitProvider({ allowedRoots: [root] });
       const status = await provider.getStatus(repositoryPath);
@@ -36,7 +38,7 @@ describe('GitProvider', () => {
         expect.arrayContaining([
           expect.objectContaining({ path: 'readme.txt', unstaged: true }),
           expect.objectContaining({ kind: 'rename', path: '重命名 文件.txt' }),
-          expect.objectContaining({ kind: 'untracked', path: '未跟踪\n文件.txt' }),
+          expect.objectContaining({ kind: 'untracked', path: untrackedFilePath }),
         ]),
       );
       expect(locations.branches).toEqual(
@@ -52,7 +54,7 @@ describe('GitProvider', () => {
       expect(detail.changedFiles).toEqual(
         expect.arrayContaining([expect.objectContaining({ path: 'readme.txt', additions: 1 })]),
       );
-      const untrackedDiff = await provider.readDiff(repositoryPath, 'working', '未跟踪\n文件.txt');
+      const untrackedDiff = await provider.readDiff(repositoryPath, 'working', untrackedFilePath);
       expect(untrackedDiff.content).toContain('new file mode');
     } finally {
       await rm(root, { recursive: true, force: true });

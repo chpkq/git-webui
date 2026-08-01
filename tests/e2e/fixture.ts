@@ -19,7 +19,7 @@ export const createE2eFixture = async (): Promise<E2eFixture> => {
   const remotePath = path.join(root, 'remote.git');
   const otherPath = path.join(root, 'other');
   await mkdir(repositoryPath);
-  await runGit(root, ['init', '--bare', remotePath]);
+  await runGit(root, ['init', '--bare', '--initial-branch=main', remotePath]);
   await runGit(repositoryPath, ['init', '-b', 'main']);
   await runGit(repositoryPath, ['config', 'user.name', '浏览器测试']);
   await runGit(repositoryPath, ['config', 'user.email', 'e2e@example.com']);

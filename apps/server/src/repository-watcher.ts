@@ -20,7 +20,9 @@ export class RepositoryWatcher {
 
   private timer: NodeJS.Timeout | undefined;
 
-  private polling = false;
+  private pollPromise: Promise<void> | undefined;
+
+  private stopped = true;
 
   public constructor(
     private readonly repositoryService: RepositoryService,
@@ -29,15 +31,19 @@ export class RepositoryWatcher {
 
   public start(): void {
     if (this.timer !== undefined) return;
+    this.stopped = false;
     this.timer = setInterval(() => void this.poll(), this.intervalMs);
     void this.poll();
   }
 
-  public stop(): void {
+  public async stop(): Promise<void> {
+    this.stopped = true;
     if (this.timer !== undefined) clearInterval(this.timer);
     this.timer = undefined;
     for (const timer of this.pending.values()) clearTimeout(timer);
     this.pending.clear();
+    const pollPromise = this.pollPromise;
+    if (pollPromise !== undefined) await pollPromise;
   }
 
   public subscribe(listener: RepositoryListener): () => void {
@@ -46,18 +52,27 @@ export class RepositoryWatcher {
   }
 
   private async poll(): Promise<void> {
-    if (this.polling) return;
-    this.polling = true;
-    try {
-      const repositories = this.repositoryService.list();
-      const knownIds = new Set(repositories.map((repository) => repository.id));
-      for (const repositoryId of this.fingerprints.keys()) {
-        if (!knownIds.has(repositoryId)) this.fingerprints.delete(repositoryId);
-      }
-      await Promise.all(repositories.map(async (repository) => this.pollRepository(repository.id)));
-    } finally {
-      this.polling = false;
+    if (this.stopped) return;
+    if (this.pollPromise !== undefined) {
+      await this.pollPromise;
+      return;
     }
+    const pollPromise = this.pollRepositories();
+    this.pollPromise = pollPromise;
+    try {
+      await pollPromise;
+    } finally {
+      if (this.pollPromise === pollPromise) this.pollPromise = undefined;
+    }
+  }
+
+  private async pollRepositories(): Promise<void> {
+    const repositories = this.repositoryService.list();
+    const knownIds = new Set(repositories.map((repository) => repository.id));
+    for (const repositoryId of this.fingerprints.keys()) {
+      if (!knownIds.has(repositoryId)) this.fingerprints.delete(repositoryId);
+    }
+    await Promise.all(repositories.map(async (repository) => this.pollRepository(repository.id)));
   }
 
   private async pollRepository(repositoryId: string): Promise<void> {
@@ -74,6 +89,7 @@ export class RepositoryWatcher {
     } catch (error) {
       fingerprint = JSON.stringify({ error: errorCode(error) });
     }
+    if (this.stopped) return;
     const previous = this.fingerprints.get(repositoryId);
     this.fingerprints.set(repositoryId, fingerprint);
     if (previous !== undefined && previous !== fingerprint) this.scheduleEvent(repositoryId);

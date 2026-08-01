@@ -38,9 +38,42 @@ describe('RepositoryWatcher', () => {
     await wait(150);
     currentStatus = { ...status, dirty: true };
     await wait(180);
-    watcher.stop();
+    await watcher.stop();
     unsubscribe();
     expect(events).toEqual(['repository-1']);
+  });
+
+  it('停止时等待进行中的仓库查询完成', async () => {
+    let resolveStarted = (): void => undefined;
+    const started = new Promise<void>((resolve) => {
+      resolveStarted = resolve;
+    });
+    let resolveQuery = (): void => undefined;
+    const query = new Promise<void>((resolve) => {
+      resolveQuery = resolve;
+    });
+    const service = {
+      list: () => [{ id: 'repository-1' }],
+      getStatus: async () => {
+        resolveStarted();
+        await query;
+        return { repository: { id: 'repository-1' }, status };
+      },
+      getLocations: async () => ({ repository: { id: 'repository-1' }, locations }),
+    } as unknown as RepositoryService;
+    const watcher = new RepositoryWatcher(service, 10);
+    watcher.start();
+    await started;
+
+    let stopped = false;
+    const stopPromise = watcher.stop().then(() => {
+      stopped = true;
+    });
+    await wait(20);
+    expect(stopped).toBe(false);
+    resolveQuery();
+    await stopPromise;
+    expect(stopped).toBe(true);
   });
 });
 
