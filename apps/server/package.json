@@ -1,0 +1,17 @@
+{
+  "name": "@git-webui/server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@git-webui/git-core": "workspace:*",
+    "@git-webui/shared": "workspace:*",
+    "fastify": "^5.4.0"
+  }
+}
