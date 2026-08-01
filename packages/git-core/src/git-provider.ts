@@ -83,6 +83,7 @@ export class GitProvider {
         ...process.env,
         GIT_TERMINAL_PROMPT: '0',
         GCM_INTERACTIVE: 'Never',
+        GIT_OPTIONAL_LOCKS: '0',
       },
       onOutput,
       signal,

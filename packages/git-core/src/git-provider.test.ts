@@ -59,6 +59,21 @@ describe('GitProvider', () => {
     }
   });
 
+  it('读取状态时不会因外部 Git 遗留 index.lock 失败', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'git-webui-provider-lock-'));
+    const repositoryPath = path.join(root, 'repository');
+    await mkdir(repositoryPath);
+    try {
+      await runGit(repositoryPath, ['init', '-b', 'main']);
+      await writeFile(path.join(repositoryPath, '.git', 'index.lock'), '');
+
+      const provider = new GitProvider({ allowedRoots: [root] });
+      await expect(provider.getStatus(repositoryPath)).resolves.toMatchObject({ branch: 'main' });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it.each([
     [
       'authentication failure',
