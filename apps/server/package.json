@@ -12,6 +12,7 @@
   "dependencies": {
     "@git-webui/git-core": "workspace:*",
     "@git-webui/shared": "workspace:*",
-    "fastify": "^5.4.0"
+    "fastify": "^5.4.0",
+    "zod": "^3.25.76"
   }
 }

@@ -1,9 +1,14 @@
 import { GitWebUiError } from '@git-webui/shared';
+import type { UserRole } from '@git-webui/shared';
+import path from 'node:path';
 
 export interface ServerConfig {
   host: string;
   port: number;
   version: string;
+  allowedRoots: readonly string[];
+  databasePath: string;
+  role: UserRole;
 }
 
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '::1']);
@@ -21,5 +26,21 @@ export const readServerConfig = (env: NodeJS.ProcessEnv = process.env): ServerCo
       { host },
     );
   }
-  return { host, port, version: env.GIT_WEBUI_VERSION ?? '0.1.0' };
+  const allowedRoots = (env.GIT_WEBUI_ALLOWED_ROOTS ?? path.resolve(process.cwd(), '../..'))
+    .split(path.delimiter)
+    .map((root) => root.trim())
+    .filter(Boolean);
+  const role = env.GIT_WEBUI_ROLE ?? 'admin';
+  if (!['viewer', 'editor', 'admin'].includes(role)) {
+    throw new GitWebUiError('INVALID_REQUEST', 'GIT_WEBUI_ROLE 必须是 viewer、editor 或 admin。');
+  }
+  return {
+    host,
+    port,
+    version: env.GIT_WEBUI_VERSION ?? '0.1.0',
+    allowedRoots,
+    databasePath:
+      env.GIT_WEBUI_DATABASE ?? path.resolve(process.cwd(), '../../data/git-webui.sqlite'),
+    role: role as UserRole,
+  };
 };
