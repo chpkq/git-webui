@@ -39,7 +39,7 @@ services:
       server:
         condition: service_healthy
     ports:
-      - '${GIT_WEBUI_WEB_BIND:-127.0.0.1:8080}:80'
+      - '${GIT_WEBUI_WEB_BIND:-0.0.0.0:8080}:80'
 
 volumes:
   git-webui-data:

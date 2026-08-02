@@ -9,7 +9,7 @@
 - [x] `corepack pnpm format:check`
 - [x] `corepack pnpm test`：真实临时 Git 仓库、bare remote、边界路径、权限、同步和取消测试
 - [x] `corepack pnpm exec playwright test tests/e2e --project=chromium`：注册仓库、Working Copy、URL 状态、面板尺寸保存、Stage/Unstage、Fetch/Pull/Push 和 Branch/Remote 管理
-- [x] 默认配置绑定所有网卡，并保留远程监听门禁、session、CSRF 和登录限流
+- [x] 默认后端回环监听、开发前端绑定所有网卡，并保留远程监听门禁、session、CSRF 和登录限流
 - [x] `Dockerfile`、`docker-compose.yml`、Nginx SSE 代理和 standalone 打包脚本已提交
 
 ## 2026-08-01 候选版验证记录

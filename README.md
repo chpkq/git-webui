@@ -4,7 +4,7 @@ Git WebUI 是一个直接操作部署机器真实 Git Working Tree 的轻量 Web
 
 ## 当前状态
 
-项目按 `project-execution-plan.md` 的 M0 至 M6 顺序开发。后端默认绑定 `0.0.0.0`，但只有显式开启远程门禁并配置鉴权后才会启动；Git CLI 是仓库状态的唯一真相源。
+项目按 `project-execution-plan.md` 的 M0 至 M6 顺序开发。后端默认只绑定本机回环地址，开发前端默认绑定 `0.0.0.0`；Git CLI 是仓库状态的唯一真相源。
 
 V0.1 当前实现包含：
 
@@ -14,7 +14,7 @@ V0.1 当前实现包含：
 - 真实 Git Working Tree 的查询、分页历史、Diff、Stage/Unstage；
 - Fetch All + Prune、ff-only Pull、显式目标 Push/upstream；
 - Remote/Branch 管理、操作队列、操作日志、SSE 进度和 `repo.changed` 刷新；
-- 默认绑定所有网卡，但必须显式配置 session、CSRF、限流和角色门禁后才允许启动。
+- 后端默认回环监听；开发前端可绑定所有网卡，写操作仍由后端权限、CSRF 和审计门禁保护。
 
 ## 开发环境
 
@@ -31,7 +31,7 @@ pnpm test
 pnpm dev
 ```
 
-打开 <http://127.0.0.1:5173> 查看前端。后端默认绑定 `0.0.0.0:3000`，本机可通过 <http://127.0.0.1:3000> 访问。
+打开 <http://127.0.0.1:5173> 查看前端。开发前端默认绑定 `0.0.0.0:5173`，后端默认只绑定 <http://127.0.0.1:3000>。
 
 ## 范围边界
 
@@ -41,7 +41,7 @@ V0.1 不实现 Commit 创建、Stash、Merge、Rebase、Cherry-pick、Revert、F
 
 ## 配置
 
-默认配置只允许本机访问，仓库只能注册在 `GIT_WEBUI_ALLOWED_ROOTS` 内。环境变量使用系统的路径分隔符分隔多个根目录：macOS/Linux 使用 `:`，Windows 使用 `;`。
+默认后端只允许本机访问，开发前端和 Web 容器可按配置绑定所有网卡；仓库只能注册在 `GIT_WEBUI_ALLOWED_ROOTS` 内。环境变量使用系统的路径分隔符分隔多个根目录：macOS/Linux 使用 `:`，Windows 使用 `;`。
 
 ```bash
 GIT_WEBUI_ALLOWED_ROOTS=/Users/you/src:/Users/you/work \
@@ -125,14 +125,14 @@ docker compose up -d --build
 curl http://127.0.0.1:8080/health
 ```
 
-默认只将 Nginx 发布到 `127.0.0.1:8080`。通过反向代理或 Tailscale 暴露时，保持 Web 端口在本机，启用 HTTPS 后把 `GIT_WEBUI_COOKIE_SECURE=true`。容器内的 Git 不会自动获得宿主机 SSH Agent、credential helper 或用户级 Git 配置；需要 Push/Pull 时，应按部署平台的安全方式显式提供 SSH Agent/凭据，应用本身仍不保存这些秘密。
+默认将 Nginx 发布到 `0.0.0.0:8080`；如需限制到本机，可设置 `GIT_WEBUI_WEB_BIND=127.0.0.1:8080`。通过反向代理或 Tailscale 暴露时，启用 HTTPS 后把 `GIT_WEBUI_COOKIE_SECURE=true`。容器内的 Git 不会自动获得宿主机 SSH Agent、credential helper 或用户级 Git 配置；需要 Push/Pull 时，应按部署平台的安全方式显式提供 SSH Agent/凭据，应用本身仍不保存这些秘密。
 
 备份 Docker 数据前停止后端容器，备份 `/var/lib/git-webui` 对应的 named volume；恢复后再启动服务。不要只复制正在写入的 SQLite 主文件而忽略 WAL 文件。
 
 ## LAN、Tailscale 与反向代理边界
 
-- 本机开发后端默认绑定 `0.0.0.0`；Standalone 启动器仍显式绑定 `127.0.0.1`。
-- 后端绑定非回环地址必须设置 `GIT_WEBUI_ENABLE_REMOTE=true`、密码、session secret 和角色；缺少任一项服务会拒绝启动。
+- 本机开发后端默认绑定 `127.0.0.1`，开发前端默认绑定 `0.0.0.0`；Standalone 启动器仍显式绑定 `127.0.0.1`。
+- 后端只有绑定非回环地址时才必须设置 `GIT_WEBUI_ENABLE_REMOTE=true`、密码、session secret 和角色；缺少任一项服务会拒绝启动。
 - 更推荐由 Nginx/Caddy/Traefik 终止 HTTPS，再转发 `/`、`/api` 和 `/health`；反向代理必须支持 SSE，关闭 `/api/operations/events` 的缓冲并提高读取超时。
 - Tailscale ACL、HTTPS 证书和主机防火墙属于部署层控制，不能替代 WebUI 登录、角色校验和 CSRF。
 
