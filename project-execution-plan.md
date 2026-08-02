@@ -53,7 +53,7 @@ V0.1 的产品定位是“直接操作部署机器真实 Git Working Tree 的轻
 - 支持 Remote 增删改和 Branch 创建、切换、重命名、安全删除、设置 upstream。
 - 所有写操作包含 preflight、权限、确认、per-repo mutex、结构化结果、日志和审计。
 - 外部 Git 操作后能自动刷新；大仓库采用分页、虚拟列表和按需 Diff。
-- 默认仅本机访问；远程监听必须具备登录、Viewer/Editor/Admin 权限和 CSRF 防护。
+- 默认后端绑定 `0.0.0.0`；启动远程监听必须具备登录、Viewer/Editor/Admin 权限和 CSRF 防护。
 
 ### 3.2 P1 可延后到 V0.1 后半段
 

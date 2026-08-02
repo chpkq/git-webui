@@ -19,7 +19,7 @@ export interface ServerConfig {
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '::1']);
 
 export const readServerConfig = (env: NodeJS.ProcessEnv = process.env): ServerConfig => {
-  const host = env.GIT_WEBUI_HOST ?? '127.0.0.1';
+  const host = env.GIT_WEBUI_HOST ?? '0.0.0.0';
   const port = Number(env.GIT_WEBUI_PORT ?? '3000');
   if (!Number.isInteger(port) || port < 1 || port > 65_535) {
     throw new GitWebUiError('INVALID_REQUEST', 'GIT_WEBUI_PORT 必须是 1 到 65535 之间的整数。');

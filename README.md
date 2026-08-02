@@ -4,7 +4,7 @@ Git WebUI 是一个直接操作部署机器真实 Git Working Tree 的轻量 Web
 
 ## 当前状态
 
-项目按 `project-execution-plan.md` 的 M0 至 M6 顺序开发。默认服务只监听 `127.0.0.1`，Git CLI 是仓库状态的唯一真相源。
+项目按 `project-execution-plan.md` 的 M0 至 M6 顺序开发。后端默认绑定 `0.0.0.0`，但只有显式开启远程门禁并配置鉴权后才会启动；Git CLI 是仓库状态的唯一真相源。
 
 V0.1 当前实现包含：
 
@@ -14,7 +14,7 @@ V0.1 当前实现包含：
 - 真实 Git Working Tree 的查询、分页历史、Diff、Stage/Unstage；
 - Fetch All + Prune、ff-only Pull、显式目标 Push/upstream；
 - Remote/Branch 管理、操作队列、操作日志、SSE 进度和 `repo.changed` 刷新；
-- 默认回环监听，以及显式配置才开启的 session、CSRF、限流和角色门禁。
+- 默认绑定所有网卡，但必须显式配置 session、CSRF、限流和角色门禁后才允许启动。
 
 ## 开发环境
 
@@ -31,7 +31,7 @@ pnpm test
 pnpm dev
 ```
 
-打开 <http://127.0.0.1:5173> 查看前端。后端默认运行在 <http://127.0.0.1:3000>。
+打开 <http://127.0.0.1:5173> 查看前端。后端默认绑定 `0.0.0.0:3000`，本机可通过 <http://127.0.0.1:3000> 访问。
 
 ## 范围边界
 
@@ -131,8 +131,8 @@ curl http://127.0.0.1:8080/health
 
 ## LAN、Tailscale 与反向代理边界
 
-- 本机开发和 Standalone 默认只监听 `127.0.0.1`。
-- 直接监听 LAN/Tailscale 地址必须设置 `GIT_WEBUI_ENABLE_REMOTE=true`、密码、session secret 和角色；缺少任一项服务会拒绝启动。
+- 本机开发后端默认绑定 `0.0.0.0`；Standalone 启动器仍显式绑定 `127.0.0.1`。
+- 后端绑定非回环地址必须设置 `GIT_WEBUI_ENABLE_REMOTE=true`、密码、session secret 和角色；缺少任一项服务会拒绝启动。
 - 更推荐由 Nginx/Caddy/Traefik 终止 HTTPS，再转发 `/`、`/api` 和 `/health`；反向代理必须支持 SSE，关闭 `/api/operations/events` 的缓冲并提高读取超时。
 - Tailscale ACL、HTTPS 证书和主机防火墙属于部署层控制，不能替代 WebUI 登录、角色校验和 CSRF。
 
