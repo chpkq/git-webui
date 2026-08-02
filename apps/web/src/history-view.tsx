@@ -88,7 +88,7 @@ export const HistoryView = ({
   const scrollRef = useRef<HTMLDivElement>(null);
   const commitsQuery = useInfiniteQuery({
     queryKey: ['commits', repositoryId, refName],
-    queryFn: ({ pageParam }) => getCommits(repositoryId!, refName, pageParam, 50),
+    queryFn: ({ pageParam, signal }) => getCommits(repositoryId!, refName, pageParam, 50, signal),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.page.nextCursor ?? undefined,
     enabled: repositoryId !== null,

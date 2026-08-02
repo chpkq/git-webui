@@ -6,6 +6,7 @@ interface LocationsPanelProps {
   repositories: Repository[] | undefined;
   selectedRepositoryId: string | null;
   locations: Locations | undefined;
+  currentBranch: string | null | undefined;
   loading: boolean;
   onSelectRepository: (id: string) => void;
   onSelectRef: (ref: string) => void;
@@ -22,10 +23,17 @@ const LocationGroup = ({ title, children }: { title: string; children: ReactNode
   </div>
 );
 
+const getCurrentBranchLabel = (currentBranch: string | null | undefined): string =>
+  currentBranch === undefined ? '读取中…' : (currentBranch ?? 'Detached HEAD');
+
+const isCurrentBranch = (branchName: string, currentBranch: string | null | undefined): boolean =>
+  currentBranch !== null && currentBranch !== undefined && branchName === currentBranch;
+
 export const LocationsPanel = ({
   repositories,
   selectedRepositoryId,
   locations,
+  currentBranch,
   loading,
   onSelectRepository,
   onSelectRef,
@@ -107,22 +115,27 @@ export const LocationsPanel = ({
           <div className="inline-state">Locations 暂时不可用</div>
         ) : (
           <>
-            <LocationGroup title={`LOCAL BRANCHES · ${locations.branches.length}`}>
+            <LocationGroup
+              title={`LOCAL BRANCHES · ${locations.branches.length} · 当前：${getCurrentBranchLabel(currentBranch)}`}
+            >
               {locations.branches.length === 0 ? (
                 <div className="tree-empty">暂无本地分支</div>
               ) : (
-                locations.branches.map((branch) => (
-                  <button
-                    className={`tree-row ${branch.current ? 'tree-row-current' : ''}`}
-                    type="button"
-                    key={branch.name}
-                    onClick={() => onSelectRef(branch.name)}
-                  >
-                    <span className="tree-row-icon">{branch.current ? '●' : '○'}</span>
-                    <span>{branch.name}</span>
-                    {branch.current && <em>HEAD</em>}
-                  </button>
-                ))
+                locations.branches.map((branch) => {
+                  const current = isCurrentBranch(branch.name, currentBranch);
+                  return (
+                    <button
+                      className={`tree-row ${current ? 'tree-row-current' : ''}`}
+                      type="button"
+                      key={branch.name}
+                      onClick={() => onSelectRef(branch.name)}
+                    >
+                      <span className="tree-row-icon">{current ? '●' : '○'}</span>
+                      <span>{branch.name}</span>
+                      {current && <em>当前</em>}
+                    </button>
+                  );
+                })
               )}
             </LocationGroup>
             <LocationGroup title={`REMOTES · ${locations.remotes.length}`}>

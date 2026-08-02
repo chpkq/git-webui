@@ -28,6 +28,11 @@ export const createE2eFixture = async (): Promise<E2eFixture> => {
   await runGit(repositoryPath, ['commit', '-m', 'E2E 初始提交']);
   await runGit(repositoryPath, ['remote', 'add', 'origin', remotePath]);
   await runGit(repositoryPath, ['push', '--set-upstream', 'origin', 'main']);
+  await runGit(repositoryPath, ['switch', '-c', 'feature/history']);
+  await writeFile(path.join(repositoryPath, 'history-only.txt'), 'feature history\n');
+  await runGit(repositoryPath, ['add', '--', 'history-only.txt']);
+  await runGit(repositoryPath, ['commit', '-m', 'E2E 分支独有提交']);
+  await runGit(repositoryPath, ['switch', 'main']);
   await runGit(root, ['clone', remotePath, otherPath]);
   await runGit(otherPath, ['config', 'user.name', '远端浏览器测试']);
   await runGit(otherPath, ['config', 'user.email', 'e2e-remote@example.com']);

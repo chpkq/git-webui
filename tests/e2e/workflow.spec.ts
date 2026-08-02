@@ -18,6 +18,64 @@ test.afterAll(async () => {
   await removeE2eFixture(fixture);
 });
 
+test('标注当前分支并在快速切换后显示最后选中分支历史', async ({ page }) => {
+  let repositoryId: string | undefined;
+  await page.goto('/');
+  try {
+    await page.getByRole('button', { name: '注册仓库' }).first().click();
+    await page.getByLabel('仓库路径').fill(fixture.repositoryPath);
+    await page.getByLabel('显示名称（可选）').fill('E2E 历史竞态仓库');
+    await page.getByRole('button', { name: '注册仓库', exact: true }).last().click();
+    await expect(page.getByRole('button', { name: /E2E 历史竞态仓库/ })).toBeVisible();
+
+    const repositoriesResponse = await page.request.get('/api/repositories');
+    const repositories = (await repositoriesResponse.json()) as {
+      items: Array<{ id: string; name: string }>;
+    };
+    repositoryId = repositories.items.find((item) => item.name === 'E2E 历史竞态仓库')?.id;
+    expect(repositoryId).toBeDefined();
+
+    await expect(page.getByText(/LOCAL BRANCHES · 2 · 当前：main/)).toBeVisible();
+    await expect(page.getByRole('button', { name: /main.*当前/ })).toBeVisible();
+    await expect(page.getByText('E2E 初始提交')).toBeVisible();
+
+    let delayedFeatureRequest = true;
+    await page.route('**/api/repositories/*/commits*', async (route) => {
+      const ref = new URL(route.request().url()).searchParams.get('ref');
+      if (ref === 'feature/history' && delayedFeatureRequest) {
+        delayedFeatureRequest = false;
+        await new Promise((resolve) => setTimeout(resolve, 400));
+      }
+      try {
+        await route.continue();
+      } catch {
+        // 切换 ref 时浏览器可能已取消该请求。
+      }
+    });
+
+    await page.getByRole('button', { name: /feature\/history/ }).click();
+    await page.getByRole('button', { name: /main.*当前/ }).click();
+    await page.getByRole('button', { name: /feature\/history/ }).click();
+    await expect(page.getByText('E2E 分支独有提交')).toBeVisible();
+    await expect(page.getByText('E2E 初始提交')).toBeVisible();
+
+    await runGit(fixture.repositoryPath, ['switch', '--detach', 'HEAD']);
+    await expect(page.getByText(/LOCAL BRANCHES · 2 · 当前：Detached HEAD/)).toBeVisible({
+      timeout: 10_000,
+    });
+    await expect(page.getByRole('button', { name: /main.*当前/ })).toHaveCount(0);
+    await runGit(fixture.repositoryPath, ['switch', 'main']);
+    await expect(page.getByText(/LOCAL BRANCHES · 2 · 当前：main/)).toBeVisible({
+      timeout: 10_000,
+    });
+  } finally {
+    await page.unroute('**/api/repositories/*/commits*').catch(() => undefined);
+    if (repositoryId !== undefined) {
+      await page.request.delete(`/api/repositories/${repositoryId}`).catch(() => undefined);
+    }
+  }
+});
+
 test('完成注册、Working Copy、同步与 Branch/Remote 管理工作流', async ({ page }) => {
   let repositoryId: string | undefined;
   await page.goto('/');

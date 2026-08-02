@@ -23,6 +23,7 @@ describe('GitProvider', () => {
       await writeFile(path.join(repositoryPath, '中文 文件.txt'), 'rename me\n');
       await runGit(repositoryPath, ['add', '--', '.']);
       await runGit(repositoryPath, ['commit', '-m', '初始提交']);
+      await runGit(repositoryPath, ['branch', 'feature/other']);
       await runGit(repositoryPath, ['mv', '--', '中文 文件.txt', '重命名 文件.txt']);
       await writeFile(path.join(repositoryPath, 'readme.txt'), 'changed\n');
       const untrackedFilePath =

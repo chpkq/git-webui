@@ -46,8 +46,10 @@ export const apiRequest = async <T>(path: string, init?: RequestInit): Promise<T
   const method = init?.method?.toUpperCase() ?? 'GET';
   const csrfToken =
     method === 'GET' || typeof document === 'undefined' ? null : readCookie('git_webui_csrf');
+  const { signal, ...requestInit } = init ?? {};
   const response = await fetch(path, {
-    ...init,
+    ...requestInit,
+    signal,
     credentials: 'same-origin',
     headers: {
       ...(init?.body === undefined ? {} : { 'Content-Type': 'application/json' }),
@@ -112,11 +114,13 @@ export const getCommits = async (
   ref: string,
   cursor?: string,
   limit = 50,
+  signal?: AbortSignal,
 ): Promise<{ repository: Repository; page: CommitPage }> => {
   const params = new URLSearchParams({ ref, limit: String(limit) });
   if (cursor !== undefined) params.set('cursor', cursor);
   return await apiRequest<{ repository: Repository; page: CommitPage }>(
     `/api/repositories/${encodeURIComponent(id)}/commits?${params.toString()}`,
+    { signal },
   );
 };
 

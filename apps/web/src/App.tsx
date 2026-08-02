@@ -199,6 +199,13 @@ function App() {
     }
   };
 
+  const handleSelectRef = (nextRef: string): void => {
+    if (repositoryId !== null && nextRef !== ref) {
+      void queryClient.cancelQueries({ queryKey: ['commits', repositoryId] });
+    }
+    setRef(nextRef);
+  };
+
   const startResize = (
     kind: 'locations' | 'history',
     event: ReactPointerEvent<HTMLDivElement>,
@@ -321,9 +328,10 @@ function App() {
             repositories={repositories}
             selectedRepositoryId={repositoryId}
             locations={locationsQuery.data?.locations}
+            currentBranch={statusQuery.data?.status.branch}
             loading={locationsQuery.isPending}
             onSelectRepository={setRepositoryId}
-            onSelectRef={setRef}
+            onSelectRef={handleSelectRef}
             onRegister={() => setRegisterOpen(true)}
             onManage={() => {
               managementMutation.reset();

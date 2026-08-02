@@ -450,7 +450,7 @@ export class GitProvider {
     ]);
     return result.stdout
       .split(RECORD_SEPARATOR)
-      .map((record) => record.trimEnd())
+      .map((record) => record.replace(/^\n/, '').trimEnd())
       .filter(Boolean)
       .map((record) => {
         const [name, objectId, upstream, tracking, worktreePath] = record.split('\0');
