@@ -2,7 +2,13 @@ import { expect, test } from '@playwright/test';
 import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { Page } from '@playwright/test';
-import { createE2eFixture, removeE2eFixture, runGit, type E2eFixture } from './fixture.js';
+import {
+  createContextFile,
+  createE2eFixture,
+  removeE2eFixture,
+  runGit,
+  type E2eFixture,
+} from './fixture.js';
 
 const E2E_SERVER_URL = 'http://127.0.0.1:3100';
 
@@ -94,12 +100,8 @@ test('通过分支圆点切换并在右栏内联查看文件 Diff', async ({ pag
     expect(repositoryId).toBeDefined();
 
     const detailColumn = page.locator('.detail-column');
-    const summaryPanel = detailColumn.locator(':scope > .panel').first();
-    const detailBox = await detailColumn.boundingBox();
-    const emptySummaryBox = await summaryPanel.boundingBox();
-    expect(detailBox).not.toBeNull();
-    expect(emptySummaryBox).not.toBeNull();
-    expect(emptySummaryBox!.height).toBeLessThan(detailBox!.height * 0.5);
+    await expect(detailColumn.locator(':scope > *')).toHaveCount(0);
+    await expect(page.getByText('OPERATION LOG')).toHaveCount(0);
 
     await expect(page.getByText(/LOCAL BRANCHES · 2 · 当前：main/)).toBeVisible();
     await page.getByRole('button', { name: '切换当前分支' }).click();
@@ -110,16 +112,28 @@ test('通过分支圆点切换并在右栏内联查看文件 Diff', async ({ pag
     await expect(page.getByText(/E2E 分支切换仓库 · feature\/history/)).toBeVisible();
     await page.getByRole('button', { name: '关闭', exact: true }).last().click();
 
+    await page.getByRole('tab', { name: 'HISTORY' }).click();
+    await expect(page.getByRole('heading', { name: 'SUMMARY' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'CHANGED FILES' })).toBeVisible();
     await page.getByRole('button', { name: /feature\/history/ }).click();
     await page.getByText('E2E 分支独有提交').click();
-    const changedFile = page.getByRole('button', { name: /history-only\.txt/ });
+    const changedFile = page.getByRole('button', { name: /readme\.md/ });
     await expect(changedFile).toBeVisible();
     await changedFile.click();
     await expect(changedFile).toHaveAttribute('aria-expanded', 'true');
-    await expect(page.getByText('Diff · history-only.txt')).toBeVisible();
+    const historyDiff = page.locator('.commit-file-diff');
+    await expect(page.getByText('Diff · readme.md')).toBeVisible();
+    const historyToggle = historyDiff.locator('.diff-visibility-toggle');
+    await expect(historyToggle).toHaveAttribute('aria-pressed', 'false');
+    await expect(historyDiff.locator('[title="Show Unchanged Region"]')).toHaveCount(2);
+    await historyToggle.click();
+    await expect(historyToggle).toHaveAttribute('aria-pressed', 'true');
+    await expect(historyDiff.locator('[title="Show Unchanged Region"]')).toHaveCount(0);
+    await historyToggle.click();
+    await expect(historyToggle).toHaveAttribute('aria-pressed', 'false');
     await changedFile.click();
     await expect(changedFile).toHaveAttribute('aria-expanded', 'false');
-    await expect(page.getByText('Diff · history-only.txt')).toBeHidden();
+    await expect(page.getByText('Diff · readme.md')).toBeHidden();
   } finally {
     await runGit(fixture.repositoryPath, ['switch', 'main']).catch(() => undefined);
     if (repositoryId !== undefined) {
@@ -145,9 +159,37 @@ test('完成注册、Working Copy、同步与 Branch/Remote 管理工作流', as
     repositoryId = repositories.items.find((item) => item.name === 'E2E 工作流仓库')?.id;
     expect(repositoryId).toBeDefined();
 
-    await writeFile(pathFor(fixture.repositoryPath, 'readme.md'), '# e2e changed\n');
+    await writeFile(
+      pathFor(fixture.repositoryPath, 'readme.md'),
+      createContextFile('Working Copy 变更'),
+    );
+    await writeFile(
+      pathFor(fixture.repositoryPath, 'secondary.md'),
+      createContextFile('辅助文件变更'),
+    );
     await page.getByRole('tab', { name: 'WORKING COPY' }).click();
-    await expect(page.getByRole('button', { name: /readme\.md/ })).toBeVisible({ timeout: 10_000 });
+    const workingFile = page.getByRole('button', { name: /readme\.md/ });
+    await expect(workingFile).toBeVisible({ timeout: 10_000 });
+    await workingFile.click();
+    const workingDiff = page.locator('.detail-column .working-diff-pane');
+    await expect(workingDiff.locator('.diff-header')).toContainText('readme.md');
+    const workingToggle = workingDiff.locator('.diff-visibility-toggle');
+    await expect(workingToggle).toHaveAttribute('aria-pressed', 'false');
+    await expect(workingDiff.locator('[title="Show Unchanged Region"]')).toHaveCount(2);
+    await workingToggle.click();
+    await expect(workingToggle).toHaveAttribute('aria-pressed', 'true');
+    await expect(workingDiff.locator('[title="Show Unchanged Region"]')).toHaveCount(0);
+    const secondaryFile = page.getByRole('button', { name: /secondary\.md/ });
+    await secondaryFile.click();
+    await expect(workingDiff.locator('.diff-header')).toContainText('secondary.md');
+    await expect(workingDiff.locator('.diff-visibility-toggle')).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    );
+    await expect(page.locator('.history-content .working-diff-pane')).toHaveCount(0);
+
+    await runGit(fixture.repositoryPath, ['restore', '--', 'secondary.md']);
+    await expect.poll(() => readFileStatus(page, repositoryId!, 'secondary.md')).toBe('missing');
 
     page.once('dialog', (dialog) => void dialog.accept());
     await page.getByRole('button', { name: 'Stage All', exact: true }).click();

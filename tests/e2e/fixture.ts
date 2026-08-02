@@ -23,14 +23,16 @@ export const createE2eFixture = async (): Promise<E2eFixture> => {
   await runGit(repositoryPath, ['init', '-b', 'main']);
   await runGit(repositoryPath, ['config', 'user.name', '浏览器测试']);
   await runGit(repositoryPath, ['config', 'user.email', 'e2e@example.com']);
-  await writeFile(path.join(repositoryPath, 'readme.md'), '# e2e\n');
-  await runGit(repositoryPath, ['add', '--', 'readme.md']);
+  await writeFile(path.join(repositoryPath, 'readme.md'), createContextFile('初始内容'));
+  await writeFile(path.join(repositoryPath, 'secondary.md'), createContextFile('辅助文件'));
+  await runGit(repositoryPath, ['add', '--', 'readme.md', 'secondary.md']);
   await runGit(repositoryPath, ['commit', '-m', 'E2E 初始提交']);
   await runGit(repositoryPath, ['remote', 'add', 'origin', remotePath]);
   await runGit(repositoryPath, ['push', '--set-upstream', 'origin', 'main']);
   await runGit(repositoryPath, ['switch', '-c', 'feature/history']);
   await writeFile(path.join(repositoryPath, 'history-only.txt'), 'feature history\n');
-  await runGit(repositoryPath, ['add', '--', 'history-only.txt']);
+  await writeFile(path.join(repositoryPath, 'readme.md'), createContextFile('History 变更'));
+  await runGit(repositoryPath, ['add', '--', 'history-only.txt', 'readme.md']);
   await runGit(repositoryPath, ['commit', '-m', 'E2E 分支独有提交']);
   await runGit(repositoryPath, ['switch', 'main']);
   await runGit(root, ['clone', remotePath, otherPath]);
@@ -46,6 +48,11 @@ export const runGit = async (cwd: string, args: string[]): Promise<void> => {
     shell: false,
   });
 };
+
+export const createContextFile = (changedLine: string): string =>
+  `${Array.from({ length: 40 }, (_, index) =>
+    index === 20 ? `line ${index + 1}: ${changedLine}` : `line ${index + 1}`,
+  ).join('\n')}\n`;
 
 export const removeE2eFixture = async (fixture: E2eFixture): Promise<void> => {
   await rm(fixture.root, { recursive: true, force: true });

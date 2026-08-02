@@ -3,6 +3,7 @@ import { DiffEditor } from '@monaco-editor/react';
 import { useQuery } from '@tanstack/react-query';
 import { EmptyState, Panel } from '@git-webui/ui-components';
 import { getCommitDetail, getDiff } from './api.js';
+import { createDiffEditorOptions, DiffVisibilityToggle } from './diff-view-controls.js';
 import './monaco-config.js';
 
 interface SummaryPanelProps {
@@ -35,6 +36,7 @@ const CommitFileDiff = ({
   commitHash: string;
   path: string;
 }) => {
+  const [showFullFile, setShowFullFile] = useState(false);
   const fileDiffQuery = useQuery({
     queryKey: ['commit-diff', repositoryId, commitHash, path],
     queryFn: () =>
@@ -47,7 +49,13 @@ const CommitFileDiff = ({
 
   return (
     <div className="commit-file-diff">
-      <div className="commit-file-diff-title">Diff · {path}</div>
+      <div className="commit-file-diff-title">
+        <DiffVisibilityToggle
+          showFullFile={showFullFile}
+          onToggle={() => setShowFullFile((current) => !current)}
+        />
+        <span>Diff · {path}</span>
+      </div>
       {fileDiffQuery.isPending ? (
         <div className="diff-placeholder">加载文件 Diff…</div>
       ) : fileDiffQuery.isError ? (
@@ -65,12 +73,7 @@ const CommitFileDiff = ({
             modified={fileDiffQuery.data?.diff.modifiedContent ?? ''}
             language={languageForPath(path)}
             theme="vs-dark"
-            options={{
-              readOnly: true,
-              renderSideBySide: false,
-              minimap: { enabled: false },
-              wordWrap: 'on',
-            }}
+            options={createDiffEditorOptions({ renderSideBySide: false, showFullFile })}
           />
         </div>
       )}

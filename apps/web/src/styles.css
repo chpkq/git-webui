@@ -321,7 +321,16 @@ button:not(:disabled):active {
 
 .detail-column {
   display: grid;
-  grid-template-rows: auto minmax(180px, 1fr) minmax(110px, 0.26fr);
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.detail-column-empty,
+.detail-column-working {
+  display: block;
+}
+
+.detail-column-working .working-diff-pane {
+  height: 100%;
 }
 
 .detail-column > .panel:first-child {
@@ -872,6 +881,10 @@ button:not(:disabled):active {
 }
 
 .commit-file-diff-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 37px;
   padding: 8px 13px;
   color: #7e8da0;
   background: #151b23;
@@ -1126,68 +1139,6 @@ button:not(:disabled):active {
   background: #2b2027;
 }
 
-.operation-log-list {
-  overflow: auto;
-}
-
-.operation-log-row {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  padding: 7px 11px;
-  border-bottom: 1px solid #232c37;
-  color: #8e9bad;
-  font-size: 10px;
-}
-
-.operation-status {
-  min-width: 30px;
-  color: #7e8da1;
-  font-size: 9px;
-}
-
-.operation-status-success {
-  color: #79bd8e;
-}
-
-.operation-status-failed,
-.operation-status-conflict {
-  color: #d38d8d;
-}
-
-.operation-status-running,
-.operation-status-queued {
-  color: #d1b078;
-}
-
-.operation-log-type {
-  color: #aeb9c8;
-}
-
-.operation-log-target {
-  min-width: 0;
-  flex: 1;
-  overflow: hidden;
-  color: #69788a;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.operation-log-time {
-  color: #5c6979;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 9px;
-}
-
-.operation-cancel-button {
-  padding: 3px 5px;
-  border: 1px solid #4b3d36;
-  border-radius: 3px;
-  color: #c9a783;
-  background: transparent;
-  font-size: 9px;
-}
-
 .primary-button {
   border: 1px solid #6a8fdc;
   color: #eaf0ff;
@@ -1204,13 +1155,12 @@ button:not(:disabled):active {
   display: grid;
   height: 100%;
   min-height: 0;
-  grid-template-columns: minmax(220px, 0.38fr) minmax(300px, 0.62fr);
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .working-sidebar {
   min-width: 0;
   overflow: auto;
-  border-right: 1px solid #2b323d;
 }
 
 .working-toolbar,
@@ -1330,6 +1280,18 @@ button:not(:disabled):active {
   color: #9facbc;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 10px;
+}
+
+.diff-header-leading {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.diff-visibility-toggle {
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .monaco-diff {

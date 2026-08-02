@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { CSSProperties, PointerEvent as ReactPointerEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { HealthResponse, Repository } from '@git-webui/shared';
+import type { FileStatus, HealthResponse, Repository } from '@git-webui/shared';
 import { StatusPill } from '@git-webui/ui-components';
 import {
   apiRequest,
@@ -21,12 +21,12 @@ import { HistoryView } from './history-view.js';
 import { LocationsPanel } from './locations-panel.js';
 import { RegisterDialog } from './register-dialog.js';
 import { SummaryPanel } from './summary-panel.js';
-import { OperationLog } from './operation-log.js';
 import { SyncDialog, type SyncAction } from './sync-dialog.js';
 import { ManagementDialog } from './management-dialog.js';
 import { BranchSwitchDialog } from './branch-switch-dialog.js';
 import { LoginPanel } from './login-panel.js';
-import { WorkingCopyView } from './working-copy-view.js';
+import { WorkingCopyDiffPanel, WorkingCopyView } from './working-copy-view.js';
+import { useRepositoryEvents } from './repository-events.js';
 import { useWorkspaceStore } from './workspace-store.js';
 
 const fetchHealth = async (): Promise<HealthResponse> =>
@@ -70,6 +70,8 @@ function App() {
   const [managementOpen, setManagementOpen] = useState(false);
   const [branchSwitchTarget, setBranchSwitchTarget] = useState<string | null>(null);
   const [workspaceLayout, setWorkspaceLayout] = useState<WorkspaceLayout>(readWorkspaceLayout);
+  const [detailSidebarActivated, setDetailSidebarActivated] = useState(false);
+  const [workingCopyPath, setWorkingCopyPath] = useState<string | null>(null);
   const { repositoryId, ref, commitHash, view, setRepositoryId, setRef, setCommitHash, setView } =
     useWorkspaceStore();
   const authQuery = useQuery({ queryKey: ['auth'], queryFn: getAuthSession, staleTime: 60_000 });
@@ -171,6 +173,16 @@ function App() {
     () => repositories?.find((repository) => repository.id === repositoryId),
     [repositories, repositoryId],
   );
+  const workingCopyEntries = useMemo<FileStatus[]>(
+    () => statusQuery.data?.status.entries.filter((entry) => entry.kind !== 'ignored') ?? [],
+    [statusQuery.data?.status.entries],
+  );
+  const selectedWorkingCopyEntry = useMemo(
+    () => workingCopyEntries.find((entry) => entry.path === workingCopyPath),
+    [workingCopyEntries, workingCopyPath],
+  );
+
+  useRepositoryEvents(repositoryId);
 
   useEffect(() => {
     if (repositories === undefined) return;
@@ -185,6 +197,16 @@ function App() {
       setRepositoryId(repositories[0]?.id ?? null);
     }
   }, [repositories, repositoryId, setRepositoryId]);
+
+  useEffect(() => {
+    if (
+      workingCopyPath !== null &&
+      workingCopyEntries.some((entry) => entry.path === workingCopyPath)
+    ) {
+      return;
+    }
+    setWorkingCopyPath(workingCopyEntries[0]?.path ?? null);
+  }, [workingCopyEntries, workingCopyPath]);
 
   useEffect(() => {
     const params = new URLSearchParams();
@@ -393,7 +415,10 @@ function App() {
               type="button"
               role="tab"
               aria-selected={view === 'history'}
-              onClick={() => setView('history')}
+              onClick={() => {
+                setDetailSidebarActivated(true);
+                setView('history');
+              }}
             >
               HISTORY
             </button>
@@ -402,7 +427,10 @@ function App() {
               type="button"
               role="tab"
               aria-selected={view === 'working'}
-              onClick={() => setView('working')}
+              onClick={() => {
+                setDetailSidebarActivated(true);
+                setView('working');
+              }}
             >
               WORKING COPY
             </button>
@@ -422,6 +450,8 @@ function App() {
                 loading={statusQuery.isPending}
                 error={statusQuery.isError ? statusQuery.error.message : null}
                 canWrite={role !== 'viewer'}
+                selectedPath={workingCopyPath}
+                onSelectPath={setWorkingCopyPath}
               />
             )}
           </div>
@@ -433,9 +463,21 @@ function App() {
           onPointerDown={(event) => startResize('history', event)}
         />
 
-        <aside className="detail-column">
-          <SummaryPanel repositoryId={repositoryId} commitHash={commitHash} />
-          <OperationLog repositoryId={repositoryId} />
+        <aside
+          className={`detail-column ${
+            detailSidebarActivated ? `detail-column-${view}` : 'detail-column-empty'
+          }`}
+        >
+          {detailSidebarActivated && view === 'history' && (
+            <SummaryPanel repositoryId={repositoryId} commitHash={commitHash} />
+          )}
+          {detailSidebarActivated && view === 'working' && (
+            <WorkingCopyDiffPanel
+              repositoryId={repositoryId}
+              entry={selectedWorkingCopyEntry}
+              canWrite={role !== 'viewer'}
+            />
+          )}
         </aside>
       </main>
 
