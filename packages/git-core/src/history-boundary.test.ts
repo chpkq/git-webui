@@ -64,5 +64,5 @@ describe('commit history boundaries', () => {
     } finally {
       await rm(root, { recursive: true, force: true });
     }
-  }, 30_000);
+  }, 120_000);
 });

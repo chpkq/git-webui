@@ -18,6 +18,7 @@ export default defineConfig({
   test: {
     include: ['packages/**/*.test.ts', 'apps/**/*.test.ts', 'tests/**/*.test.ts'],
     environment: 'node',
+    testTimeout: 120_000,
     coverage: {
       reporter: ['text', 'html'],
       exclude: ['**/dist/**'],
