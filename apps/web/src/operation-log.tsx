@@ -95,9 +95,7 @@ export const OperationLog = ({ repositoryId }: { repositoryId: string | null }) 
                 {typeof operation.target.branch === 'string' ? operation.target.branch : ''}
               </span>
               {(operation.status === 'queued' || operation.status === 'running') &&
-                (operation.type === 'fetch' ||
-                  operation.type === 'pull' ||
-                  operation.type === 'push') && (
+                operation.type === 'fetch' && (
                   <button
                     className="operation-cancel-button"
                     type="button"

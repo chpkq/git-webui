@@ -31,7 +31,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
     (set) => ({
       ...urlState,
       view: 'history',
-      setRepositoryId: (repositoryId) => set({ repositoryId, commitHash: null }),
+      setRepositoryId: (repositoryId) => set({ repositoryId, ref: 'HEAD', commitHash: null }),
       setRef: (ref) => set({ ref, commitHash: null }),
       setCommitHash: (commitHash) => set({ commitHash }),
       setView: (view) => set({ view }),

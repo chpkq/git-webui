@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { FileStatus, RepositoryStatus } from '@git-webui/shared';
 import { EmptyState } from '@git-webui/ui-components';
 import { getDiff, runStage } from './api.js';
+import './monaco-config.js';
 
 interface WorkingCopyViewProps {
   repositoryId: string | null;
@@ -62,8 +63,8 @@ const DiffPane = ({
   return (
     <div className="monaco-diff">
       <DiffEditor
-        original=""
-        modified={diff.content}
+        original={diff.originalContent}
+        modified={diff.modifiedContent}
         language={languageForPath(entry.path)}
         theme="vs-dark"
         options={{
@@ -135,6 +136,10 @@ export const WorkingCopyView = ({
     [entries],
   );
   const untracked = useMemo(() => entries.filter((entry) => entry.kind === 'untracked'), [entries]);
+  const stageable = useMemo(
+    () => entries.filter((entry) => entry.unstaged || entry.kind === 'untracked'),
+    [entries],
+  );
   const selectedEntry = entries.find((entry) => entry.path === selectedPath) ?? entries[0];
   const stageMutation = useMutation({
     mutationFn: ({ action, paths }: { action: 'stage' | 'unstage'; paths: string[] }) =>
@@ -174,11 +179,11 @@ export const WorkingCopyView = ({
           <button
             className="small-action-button"
             type="button"
-            disabled={!canWrite || stageMutation.isPending || changes.length === 0}
+            disabled={!canWrite || stageMutation.isPending || stageable.length === 0}
             onClick={() =>
               submitStage(
                 'stage',
-                changes.map((entry) => entry.path),
+                stageable.map((entry) => entry.path),
               )
             }
           >
@@ -240,16 +245,26 @@ export const WorkingCopyView = ({
                 >
                   {sideBySide ? 'Unified' : 'Split'}
                 </button>
-                <button
-                  className="small-action-button"
-                  type="button"
-                  disabled={!canWrite || stageMutation.isPending}
-                  onClick={() =>
-                    submitStage(selectedEntry.staged ? 'unstage' : 'stage', [selectedEntry.path])
-                  }
-                >
-                  {selectedEntry.staged ? 'Unstage' : 'Stage'}
-                </button>
+                {(selectedEntry.unstaged || selectedEntry.kind === 'untracked') && (
+                  <button
+                    className="small-action-button"
+                    type="button"
+                    disabled={!canWrite || stageMutation.isPending}
+                    onClick={() => submitStage('stage', [selectedEntry.path])}
+                  >
+                    Stage
+                  </button>
+                )}
+                {selectedEntry.staged && (
+                  <button
+                    className="small-action-button"
+                    type="button"
+                    disabled={!canWrite || stageMutation.isPending}
+                    onClick={() => submitStage('unstage', [selectedEntry.path])}
+                  >
+                    Unstage
+                  </button>
+                )}
               </span>
             </div>
             <DiffPane repositoryId={repositoryId} entry={selectedEntry} sideBySide={sideBySide} />

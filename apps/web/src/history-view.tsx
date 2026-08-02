@@ -12,6 +12,12 @@ interface HistoryViewProps {
   onSelectCommit: (hash: string) => void;
 }
 
+interface CommitGraphModel {
+  lane: number;
+  laneCount: number;
+  secondaryLanes: number[];
+}
+
 const formatDate = (value: string): string => {
   const date = new Date(value);
   if (Number.isNaN(date.valueOf())) return value;
@@ -25,10 +31,12 @@ const formatDate = (value: string): string => {
 
 const CommitRow = ({
   commit,
+  graph,
   selected,
   onClick,
 }: {
   commit: CommitSummary;
+  graph: CommitGraphModel;
   selected: boolean;
   onClick: () => void;
 }) => (
@@ -37,9 +45,25 @@ const CommitRow = ({
     type="button"
     onClick={onClick}
   >
-    <span className="commit-graph-column">
-      <span className="commit-graph-line" />
-      <span className="commit-graph-node" />
+    <span className="commit-graph-column" data-parent-count={commit.parents.length}>
+      {Array.from({ length: graph.laneCount }, (_, lane) => (
+        <span
+          className={`commit-graph-line ${lane === graph.lane ? 'commit-graph-line-active' : ''}`}
+          key={`lane:${lane}`}
+          style={{ left: `${13 + lane * 12}px` }}
+        />
+      ))}
+      {graph.secondaryLanes.map((lane) => (
+        <span
+          className="commit-graph-edge"
+          key={`edge:${lane}`}
+          style={{
+            left: `${13 + Math.min(graph.lane, lane) * 12}px`,
+            width: `${Math.abs(graph.lane - lane) * 12}px`,
+          }}
+        />
+      ))}
+      <span className="commit-graph-node" style={{ left: `${8 + graph.lane * 12}px` }} />
     </span>
     <span className="commit-row-content">
       <span className="commit-row-main">
@@ -73,6 +97,7 @@ export const HistoryView = ({
     () => commitsQuery.data?.pages.flatMap((page) => page.page.items) ?? [],
     [commitsQuery.data],
   );
+  const graphModels = useMemo(() => buildCommitGraph(commits), [commits]);
   const virtualizer = useVirtualizer({
     count: commits.length,
     getScrollElement: () => scrollRef.current,
@@ -120,6 +145,9 @@ export const HistoryView = ({
             >
               <CommitRow
                 commit={commit}
+                graph={
+                  graphModels.get(commit.hash) ?? { lane: 0, laneCount: 1, secondaryLanes: [] }
+                }
                 selected={commit.hash === selectedCommit}
                 onClick={() => onSelectCommit(commit.hash)}
               />
@@ -130,4 +158,29 @@ export const HistoryView = ({
       {commitsQuery.isFetchingNextPage && <div className="list-loading">加载更多…</div>}
     </div>
   );
+};
+
+const buildCommitGraph = (commits: readonly CommitSummary[]): Map<string, CommitGraphModel> => {
+  const lanes: string[] = [];
+  const models = new Map<string, CommitGraphModel>();
+  for (const commit of commits) {
+    const existingLane = lanes.indexOf(commit.hash);
+    const lane = existingLane < 0 ? 0 : existingLane;
+    if (existingLane < 0) lanes.splice(lane, 0, commit.hash);
+    const laneCountBefore = Math.max(1, lanes.length, commit.parents.length);
+    lanes.splice(lane, 1, ...commit.parents);
+    for (let index = lanes.length - 1; index >= 0; index -= 1) {
+      if (lanes.indexOf(lanes[index] as string) !== index) lanes.splice(index, 1);
+    }
+    const secondaryLanes = commit.parents
+      .slice(1)
+      .map((parent) => lanes.indexOf(parent))
+      .filter((parentLane) => parentLane >= 0);
+    models.set(commit.hash, {
+      lane,
+      laneCount: Math.max(laneCountBefore, lanes.length),
+      secondaryLanes,
+    });
+  }
+  return models;
 };

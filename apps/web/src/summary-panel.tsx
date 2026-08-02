@@ -1,6 +1,9 @@
+import { useEffect, useState } from 'react';
+import { DiffEditor } from '@monaco-editor/react';
 import { useQuery } from '@tanstack/react-query';
 import { EmptyState, Panel } from '@git-webui/ui-components';
-import { getCommitDetail } from './api.js';
+import { getCommitDetail, getDiff } from './api.js';
+import './monaco-config.js';
 
 interface SummaryPanelProps {
   repositoryId: string | null;
@@ -13,13 +16,39 @@ const formatDate = (value: string): string => {
   return new Intl.DateTimeFormat('zh-CN', { dateStyle: 'medium', timeStyle: 'short' }).format(date);
 };
 
+const languageForPath = (filePath: string): string => {
+  const extension = filePath.split('.').at(-1)?.toLowerCase();
+  if (extension === 'ts' || extension === 'tsx') return 'typescript';
+  if (extension === 'js' || extension === 'jsx') return 'javascript';
+  if (extension === 'json') return 'json';
+  if (extension === 'md') return 'markdown';
+  if (extension === 'css') return 'css';
+  return 'plaintext';
+};
+
 export const SummaryPanel = ({ repositoryId, commitHash }: SummaryPanelProps) => {
+  const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const detailQuery = useQuery({
     queryKey: ['commit-detail', repositoryId, commitHash],
     queryFn: () => getCommitDetail(repositoryId!, commitHash!),
     enabled: repositoryId !== null && commitHash !== null,
   });
   const detail = detailQuery.data?.detail;
+  const selectedFile = detail?.changedFiles.find((file) => file.path === selectedPath);
+  const fileDiffQuery = useQuery({
+    queryKey: ['commit-diff', repositoryId, commitHash, selectedFile?.path],
+    queryFn: () =>
+      getDiff(repositoryId!, {
+        kind: 'commit',
+        path: selectedFile!.path,
+        ref: commitHash!,
+      }),
+    enabled: repositoryId !== null && commitHash !== null && selectedFile !== undefined,
+  });
+
+  useEffect(() => {
+    setSelectedPath(null);
+  }, [commitHash]);
 
   return (
     <>
@@ -70,7 +99,12 @@ export const SummaryPanel = ({ repositoryId, commitHash }: SummaryPanelProps) =>
         ) : (
           <div className="changed-file-list">
             {detail.changedFiles.map((file) => (
-              <div className="changed-file-row" key={`${file.status}:${file.path}`}>
+              <button
+                className={`changed-file-row ${file.path === selectedPath ? 'changed-file-row-selected' : ''}`}
+                type="button"
+                key={`${file.status}:${file.path}`}
+                onClick={() => setSelectedPath(file.path)}
+              >
                 <span className={`file-status file-status-${file.status}`}>
                   {file.status[0]?.toUpperCase()}
                 </span>
@@ -78,8 +112,39 @@ export const SummaryPanel = ({ repositoryId, commitHash }: SummaryPanelProps) =>
                 <span className="changed-file-stats">
                   {file.binary ? 'binary' : `+${file.additions ?? '—'} -${file.deletions ?? '—'}`}
                 </span>
-              </div>
+              </button>
             ))}
+          </div>
+        )}
+        {selectedFile !== undefined && (
+          <div className="commit-file-diff">
+            <div className="commit-file-diff-title">Diff · {selectedFile.path}</div>
+            {fileDiffQuery.isPending ? (
+              <div className="diff-placeholder">加载文件 Diff…</div>
+            ) : fileDiffQuery.isError ? (
+              <div className="inline-state inline-state-error">{fileDiffQuery.error.message}</div>
+            ) : fileDiffQuery.data?.diff.binary ? (
+              <div className="diff-placeholder">Binary 文件，无法在文本 Diff 中展示。</div>
+            ) : fileDiffQuery.data?.diff.truncated ? (
+              <div className="diff-placeholder">Diff 超过大小上限，已截断。</div>
+            ) : fileDiffQuery.data?.diff.content === '' ? (
+              <div className="diff-placeholder">该文件没有可展示的 Diff。</div>
+            ) : (
+              <div className="monaco-diff commit-file-diff-editor">
+                <DiffEditor
+                  original={fileDiffQuery.data?.diff.originalContent ?? ''}
+                  modified={fileDiffQuery.data?.diff.modifiedContent ?? ''}
+                  language={languageForPath(selectedFile.path)}
+                  theme="vs-dark"
+                  options={{
+                    readOnly: true,
+                    renderSideBySide: false,
+                    minimap: { enabled: false },
+                    wordWrap: 'on',
+                  }}
+                />
+              </div>
+            )}
           </div>
         )}
       </Panel>

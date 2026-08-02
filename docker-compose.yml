@@ -3,6 +3,7 @@ services:
     build:
       context: .
       target: server-runtime
+    user: '${GIT_WEBUI_UID:-1000}:${GIT_WEBUI_GID:-1000}'
     environment:
       GIT_WEBUI_HOST: 0.0.0.0
       GIT_WEBUI_PORT: 3000

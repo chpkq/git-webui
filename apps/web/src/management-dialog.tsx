@@ -95,6 +95,10 @@ export const ManagementDialog = ({
 
   const requiresConfirmation = dangerActions.has(action);
   const canSubmit = !busy && (!requiresConfirmation || confirmed);
+  const updateTarget = (setter: (value: string) => void, value: string): void => {
+    setter(value);
+    setConfirmed(false);
+  };
   const targetSummary = useMemo(() => {
     switch (action) {
       case 'remote-add':
@@ -210,9 +214,23 @@ export const ManagementDialog = ({
 
         {action === 'remote-add' && (
           <>
-            <TextField label="Remote 名称" value={remoteName} onChange={setRemoteName} required />
-            <TextField label="Fetch URL" value={remoteUrl} onChange={setRemoteUrl} required />
-            <TextField label="Push URL（可选）" value={remotePushUrl} onChange={setRemotePushUrl} />
+            <TextField
+              label="Remote 名称"
+              value={remoteName}
+              onChange={(value) => updateTarget(setRemoteName, value)}
+              required
+            />
+            <TextField
+              label="Fetch URL"
+              value={remoteUrl}
+              onChange={(value) => updateTarget(setRemoteUrl, value)}
+              required
+            />
+            <TextField
+              label="Push URL（可选）"
+              value={remotePushUrl}
+              onChange={(value) => updateTarget(setRemotePushUrl, value)}
+            />
           </>
         )}
         {(action === 'remote-set-url' || action === 'remote-remove') && (
@@ -220,18 +238,26 @@ export const ManagementDialog = ({
             label="Remote"
             value={remoteName}
             options={remotes.map((remote) => ({ value: remote.name, label: remote.name }))}
-            onChange={setRemoteName}
+            onChange={(value) => updateTarget(setRemoteName, value)}
             emptyLabel="暂无 Remote"
           />
         )}
         {action === 'remote-set-url' && (
           <>
-            <TextField label="URL" value={remoteUrl} onChange={setRemoteUrl} required />
+            <TextField
+              label="URL"
+              value={remoteUrl}
+              onChange={(value) => updateTarget(setRemoteUrl, value)}
+              required
+            />
             <label className="checkbox-field">
               <input
                 type="checkbox"
                 checked={pushUrl}
-                onChange={(event) => setPushUrl(event.target.checked)}
+                onChange={(event) => {
+                  setPushUrl(event.target.checked);
+                  setConfirmed(false);
+                }}
               />
               修改 push URL（默认修改 fetch URL）
             </label>
@@ -242,13 +268,13 @@ export const ManagementDialog = ({
             <TextField
               label="新 Branch 名称"
               value={branchName}
-              onChange={setBranchName}
+              onChange={(value) => updateTarget(setBranchName, value)}
               required
             />
             <TextField
               label="Start point（可选）"
               value={startPoint}
-              onChange={setStartPoint}
+              onChange={(value) => updateTarget(setStartPoint, value)}
               hint="留空时从当前 HEAD 创建。"
             />
           </>
@@ -261,7 +287,7 @@ export const ManagementDialog = ({
               value: branch.name,
               label: `${branch.name}${branch.current ? ' · 当前' : ''}`,
             }))}
-            onChange={setBranchName}
+            onChange={(value) => updateTarget(setBranchName, value)}
             emptyLabel="暂无本地 Branch"
           />
         )}
@@ -271,13 +297,13 @@ export const ManagementDialog = ({
               label="原 Branch"
               value={oldBranchName}
               options={branches.map((branch) => ({ value: branch.name, label: branch.name }))}
-              onChange={setOldBranchName}
+              onChange={(value) => updateTarget(setOldBranchName, value)}
               emptyLabel="暂无本地 Branch"
             />
             <TextField
               label="新 Branch 名称"
               value={newBranchName}
-              onChange={setNewBranchName}
+              onChange={(value) => updateTarget(setNewBranchName, value)}
               required
             />
           </>
@@ -288,20 +314,20 @@ export const ManagementDialog = ({
               label="本地 Branch"
               value={branchName}
               options={branches.map((branch) => ({ value: branch.name, label: branch.name }))}
-              onChange={setBranchName}
+              onChange={(value) => updateTarget(setBranchName, value)}
               emptyLabel="暂无本地 Branch"
             />
             <SelectField
               label="Remote"
               value={remoteName}
               options={remotes.map((remote) => ({ value: remote.name, label: remote.name }))}
-              onChange={setRemoteName}
+              onChange={(value) => updateTarget(setRemoteName, value)}
               emptyLabel="暂无 Remote"
             />
             <TextField
               label="Remote Branch"
               value={remoteBranch}
-              onChange={setRemoteBranch}
+              onChange={(value) => updateTarget(setRemoteBranch, value)}
               required
             />
           </>

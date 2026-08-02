@@ -22,11 +22,13 @@ WORKDIR /app
 RUN apt-get update \
   && apt-get install --no-install-recommends --yes ca-certificates git openssh-client \
   && rm -rf /var/lib/apt/lists/*
+RUN mkdir -p /var/lib/git-webui && chown -R node:node /var/lib/git-webui
 COPY --from=build /tmp/git-webui-server ./
 ENV NODE_ENV=production
 ENV GIT_WEBUI_HOST=0.0.0.0
 ENV GIT_WEBUI_PORT=3000
 EXPOSE 3000
+USER node
 CMD ["node", "dist/index.js"]
 
 FROM nginx:1.27-alpine AS web-runtime

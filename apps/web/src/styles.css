@@ -564,10 +564,24 @@ button:disabled {
   background: #3a506f;
 }
 
+.commit-graph-line-active {
+  background: #6689c4;
+}
+
+.commit-graph-edge {
+  position: absolute;
+  top: 50%;
+  height: 1px;
+  background: #6689c4;
+}
+
 .commit-graph-node {
   z-index: 1;
+  position: absolute;
+  top: 50%;
   width: 9px;
   height: 9px;
+  margin-top: -6px;
   border: 2px solid #83a5ed;
   border-radius: 50%;
   background: #151a21;
@@ -693,12 +707,23 @@ button:disabled {
 
 .changed-file-row {
   display: flex;
+  width: 100%;
   align-items: center;
   gap: 8px;
   padding: 8px 13px;
   border-bottom: 1px solid #232c37;
+  border-left: 0;
+  border-right: 0;
+  border-top: 0;
   color: #a0adbd;
   font-size: 11px;
+  background: transparent;
+  text-align: left;
+}
+
+.changed-file-row:hover,
+.changed-file-row-selected {
+  background: #1d2734;
 }
 
 .file-status {
@@ -735,6 +760,22 @@ button:disabled {
   color: #627184;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 9px;
+}
+
+.commit-file-diff {
+  border-top: 1px solid #2b3542;
+}
+
+.commit-file-diff-title {
+  padding: 8px 13px;
+  color: #7e8da0;
+  background: #151b23;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+}
+
+.commit-file-diff-editor {
+  height: 320px;
 }
 
 .modal-backdrop {
