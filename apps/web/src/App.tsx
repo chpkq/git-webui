@@ -24,6 +24,7 @@ import { SummaryPanel } from './summary-panel.js';
 import { OperationLog } from './operation-log.js';
 import { SyncDialog, type SyncAction } from './sync-dialog.js';
 import { ManagementDialog } from './management-dialog.js';
+import { BranchSwitchDialog } from './branch-switch-dialog.js';
 import { LoginPanel } from './login-panel.js';
 import { WorkingCopyView } from './working-copy-view.js';
 import { useWorkspaceStore } from './workspace-store.js';
@@ -67,6 +68,7 @@ function App() {
   const [registerOpen, setRegisterOpen] = useState(false);
   const [syncAction, setSyncAction] = useState<SyncAction | null>(null);
   const [managementOpen, setManagementOpen] = useState(false);
+  const [branchSwitchTarget, setBranchSwitchTarget] = useState<string | null>(null);
   const [workspaceLayout, setWorkspaceLayout] = useState<WorkspaceLayout>(readWorkspaceLayout);
   const { repositoryId, ref, commitHash, view, setRepositoryId, setRef, setCommitHash, setView } =
     useWorkspaceStore();
@@ -117,6 +119,22 @@ function App() {
       void queryClient.invalidateQueries({ queryKey: ['repositories'] });
     },
   });
+  const refreshRepositoryQueries = async (): Promise<void> => {
+    if (repositoryId === null) return;
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['status', repositoryId] }),
+      queryClient.invalidateQueries({ queryKey: ['locations', repositoryId] }),
+      queryClient.invalidateQueries({ queryKey: ['commits', repositoryId] }),
+    ]);
+  };
+  const updateRefAfterBranchSwitch = (
+    operation: { status: string; result: Record<string, unknown> | null },
+    fallbackBranch: string,
+  ): void => {
+    if (operation.status !== 'success') return;
+    const resultBranch = operation.result?.branch;
+    setRef(typeof resultBranch === 'string' && resultBranch !== '' ? resultBranch : fallbackBranch);
+  };
   const syncMutation = useMutation({
     mutationFn: ({ action, target }: { action: SyncAction; target: Record<string, unknown> }) =>
       runSync(repositoryId!, action, target),
@@ -134,10 +152,18 @@ function App() {
       action: ManagementAction;
       target: Record<string, unknown>;
     }) => runManagement(repositoryId!, action, target),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['status', repositoryId] });
-      void queryClient.invalidateQueries({ queryKey: ['locations', repositoryId] });
-      void queryClient.invalidateQueries({ queryKey: ['commits', repositoryId] });
+    onSuccess: async (operation, variables) => {
+      await refreshRepositoryQueries();
+      if (variables.action === 'branch-switch' && typeof variables.target.name === 'string') {
+        updateRefAfterBranchSwitch(operation, variables.target.name);
+      }
+    },
+  });
+  const branchSwitchMutation = useMutation({
+    mutationFn: (name: string) => runManagement(repositoryId!, 'branch-switch', { name }),
+    onSuccess: async (operation, name) => {
+      await refreshRepositoryQueries();
+      updateRefAfterBranchSwitch(operation, name);
     },
   });
   const repositories = repositoriesQuery.data;
@@ -204,6 +230,17 @@ function App() {
       void queryClient.cancelQueries({ queryKey: ['commits', repositoryId] });
     }
     setRef(nextRef);
+  };
+
+  const handleRequestSwitchBranch = (branchName: string): void => {
+    branchSwitchMutation.reset();
+    setBranchSwitchTarget(branchName);
+  };
+
+  const closeBranchSwitchDialog = (): void => {
+    if (branchSwitchMutation.isPending) return;
+    branchSwitchMutation.reset();
+    setBranchSwitchTarget(null);
   };
 
   const startResize = (
@@ -332,6 +369,7 @@ function App() {
             loading={locationsQuery.isPending}
             onSelectRepository={setRepositoryId}
             onSelectRef={handleSelectRef}
+            onRequestSwitchBranch={handleRequestSwitchBranch}
             onRegister={() => setRegisterOpen(true)}
             onManage={() => {
               managementMutation.reset();
@@ -424,6 +462,19 @@ function App() {
           error={registerError}
           onClose={() => setRegisterOpen(false)}
           onSubmit={(path, name) => registerMutation.mutate({ path, name })}
+        />
+      )}
+      {branchSwitchTarget !== null && selectedRepository !== undefined && (
+        <BranchSwitchDialog
+          repositoryName={selectedRepository.name}
+          branchName={branchSwitchTarget}
+          operation={branchSwitchMutation.data}
+          busy={branchSwitchMutation.isPending}
+          error={
+            branchSwitchMutation.error instanceof Error ? branchSwitchMutation.error.message : null
+          }
+          onClose={closeBranchSwitchDialog}
+          onSubmit={() => branchSwitchMutation.mutate(branchSwitchTarget)}
         />
       )}
       {syncAction !== null && selectedRepository !== undefined && (

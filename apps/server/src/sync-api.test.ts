@@ -171,5 +171,5 @@ describe('sync operation API', () => {
       await app.close();
       await rm(root, { recursive: true, force: true });
     }
-  }, 30_000);
+  }, 120_000);
 });

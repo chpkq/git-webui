@@ -76,6 +76,58 @@ test('标注当前分支并在快速切换后显示最后选中分支历史', as
   }
 });
 
+test('通过分支圆点切换并在右栏内联查看文件 Diff', async ({ page }) => {
+  let repositoryId: string | undefined;
+  await page.goto('/');
+  try {
+    await page.getByRole('button', { name: '注册仓库' }).first().click();
+    await page.getByLabel('仓库路径').fill(fixture.repositoryPath);
+    await page.getByLabel('显示名称（可选）').fill('E2E 分支切换仓库');
+    await page.getByRole('button', { name: '注册仓库', exact: true }).last().click();
+    await expect(page.getByRole('button', { name: /E2E 分支切换仓库/ })).toBeVisible();
+
+    const repositoriesResponse = await page.request.get('/api/repositories');
+    const repositories = (await repositoriesResponse.json()) as {
+      items: Array<{ id: string; name: string }>;
+    };
+    repositoryId = repositories.items.find((item) => item.name === 'E2E 分支切换仓库')?.id;
+    expect(repositoryId).toBeDefined();
+
+    const detailColumn = page.locator('.detail-column');
+    const summaryPanel = detailColumn.locator(':scope > .panel').first();
+    const detailBox = await detailColumn.boundingBox();
+    const emptySummaryBox = await summaryPanel.boundingBox();
+    expect(detailBox).not.toBeNull();
+    expect(emptySummaryBox).not.toBeNull();
+    expect(emptySummaryBox!.height).toBeLessThan(detailBox!.height * 0.5);
+
+    await expect(page.getByText(/LOCAL BRANCHES · 2 · 当前：main/)).toBeVisible();
+    await page.getByRole('button', { name: '切换当前分支' }).click();
+    await expect(page.getByRole('heading', { name: '切换当前分支' })).toBeVisible();
+    await page.getByRole('button', { name: '确认切换' }).click();
+    await expect(page.getByText('操作成功')).toBeVisible();
+    await expect(page.getByText(/LOCAL BRANCHES · 2 · 当前：feature\/history/)).toBeVisible();
+    await expect(page.getByText(/E2E 分支切换仓库 · feature\/history/)).toBeVisible();
+    await page.getByRole('button', { name: '关闭', exact: true }).last().click();
+
+    await page.getByRole('button', { name: /feature\/history/ }).click();
+    await page.getByText('E2E 分支独有提交').click();
+    const changedFile = page.getByRole('button', { name: /history-only\.txt/ });
+    await expect(changedFile).toBeVisible();
+    await changedFile.click();
+    await expect(changedFile).toHaveAttribute('aria-expanded', 'true');
+    await expect(page.getByText('Diff · history-only.txt')).toBeVisible();
+    await changedFile.click();
+    await expect(changedFile).toHaveAttribute('aria-expanded', 'false');
+    await expect(page.getByText('Diff · history-only.txt')).toBeHidden();
+  } finally {
+    await runGit(fixture.repositoryPath, ['switch', 'main']).catch(() => undefined);
+    if (repositoryId !== undefined) {
+      await page.request.delete(`/api/repositories/${repositoryId}`).catch(() => undefined);
+    }
+  }
+});
+
 test('完成注册、Working Copy、同步与 Branch/Remote 管理工作流', async ({ page }) => {
   let repositoryId: string | undefined;
   await page.goto('/');

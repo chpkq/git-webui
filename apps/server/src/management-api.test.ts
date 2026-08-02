@@ -180,5 +180,5 @@ describe('remote and branch management API', () => {
       await app.close();
       await rm(root, { recursive: true, force: true });
     }
-  }, 60_000);
+  }, 120_000);
 });

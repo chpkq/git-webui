@@ -32,6 +32,25 @@ button:disabled {
   opacity: 0.5;
 }
 
+button:not(:disabled) {
+  cursor: pointer;
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease,
+    box-shadow 120ms ease,
+    color 120ms ease,
+    filter 120ms ease,
+    transform 120ms ease;
+}
+
+button:not(:disabled):hover {
+  filter: brightness(1.12);
+}
+
+button:not(:disabled):active {
+  transform: translateY(1px);
+}
+
 .app-shell {
   display: grid;
   grid-template-rows: 58px minmax(0, 1fr) 30px;
@@ -302,7 +321,23 @@ button:disabled {
 
 .detail-column {
   display: grid;
-  grid-template-rows: minmax(220px, 0.4fr) minmax(160px, 0.34fr) minmax(110px, 0.26fr);
+  grid-template-rows: auto minmax(180px, 1fr) minmax(110px, 0.26fr);
+}
+
+.detail-column > .panel:first-child {
+  height: auto;
+  min-height: 0;
+}
+
+.detail-column > .panel:first-child .panel-content {
+  flex: 0 1 auto;
+  max-height: 40vh;
+  overflow: auto;
+}
+
+.detail-column > .panel:first-child .empty-state {
+  min-height: 96px;
+  padding: 18px;
 }
 
 .detail-column .panel + .panel {
@@ -485,6 +520,61 @@ button:disabled {
   color: #aec2f2;
 }
 
+.tree-row-branch {
+  gap: 0;
+  padding: 0;
+  white-space: normal;
+}
+
+.tree-row-switch,
+.tree-row-ref {
+  border: 0;
+  color: inherit;
+  background: transparent;
+  text-align: left;
+}
+
+.tree-row-switch {
+  display: grid;
+  width: 34px;
+  flex: 0 0 34px;
+  place-items: center;
+  padding: 5px 0 5px 20px;
+}
+
+.tree-row-switch:hover:not(:disabled) {
+  color: #d5e0f8;
+}
+
+.tree-row-switch:disabled {
+  cursor: default;
+}
+
+.tree-row-current .tree-row-switch:disabled {
+  opacity: 1;
+}
+
+.tree-row-ref {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 14px 5px 0;
+  overflow: hidden;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tree-row-ref:hover {
+  color: #cad4e2;
+}
+
+.tree-row-current .tree-row-ref {
+  color: #aec2f2;
+}
+
 .tree-row-icon {
   width: 13px;
   color: #627baf;
@@ -652,6 +742,21 @@ button:disabled {
 
 .summary-content {
   padding: 16px;
+}
+
+.branch-switch-modal-card {
+  width: min(440px, calc(100vw - 40px));
+}
+
+.branch-switch-question {
+  margin: 0 0 16px;
+  color: #d4dce8;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.branch-switch-target-card {
+  margin-top: 0;
 }
 
 .summary-content h3 {

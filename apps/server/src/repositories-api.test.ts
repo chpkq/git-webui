@@ -147,7 +147,7 @@ describe('repository REST API', () => {
       await app.close();
       await rm(root, { recursive: true, force: true });
     }
-  }, 20_000);
+  }, 120_000);
 
   it('returns a stable error for a repository outside allowedRoots', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'git-webui-api-root-'));

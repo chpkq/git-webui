@@ -10,6 +10,7 @@ interface LocationsPanelProps {
   loading: boolean;
   onSelectRepository: (id: string) => void;
   onSelectRef: (ref: string) => void;
+  onRequestSwitchBranch: (branchName: string) => void;
   onRegister: () => void;
   onManage: () => void;
   onRemove: (repository: Repository) => void;
@@ -37,6 +38,7 @@ export const LocationsPanel = ({
   loading,
   onSelectRepository,
   onSelectRef,
+  onRequestSwitchBranch,
   onRegister,
   onManage,
   onRemove,
@@ -124,16 +126,29 @@ export const LocationsPanel = ({
                 locations.branches.map((branch) => {
                   const current = isCurrentBranch(branch.name, currentBranch);
                   return (
-                    <button
-                      className={`tree-row ${current ? 'tree-row-current' : ''}`}
-                      type="button"
+                    <div
+                      className={`tree-row tree-row-branch ${current ? 'tree-row-current' : ''}`}
                       key={branch.name}
-                      onClick={() => onSelectRef(branch.name)}
                     >
-                      <span className="tree-row-icon">{current ? '●' : '○'}</span>
-                      <span>{branch.name}</span>
-                      {current && <em>当前</em>}
-                    </button>
+                      <button
+                        className="tree-row-switch"
+                        type="button"
+                        disabled={current || role === 'viewer'}
+                        aria-label={current ? '当前分支' : '切换当前分支'}
+                        title={current ? '当前分支' : `切换到 ${branch.name}`}
+                        onClick={() => onRequestSwitchBranch(branch.name)}
+                      >
+                        <span className="tree-row-icon">{current ? '●' : '○'}</span>
+                      </button>
+                      <button
+                        className="tree-row-ref"
+                        type="button"
+                        onClick={() => onSelectRef(branch.name)}
+                      >
+                        <span>{branch.name}</span>
+                        {current && <em>当前</em>}
+                      </button>
+                    </div>
                   );
                 })
               )}
