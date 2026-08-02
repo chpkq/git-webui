@@ -26,8 +26,8 @@ RUN mkdir -p /var/lib/git-webui && chown -R node:node /var/lib/git-webui
 COPY --from=build /tmp/git-webui-server ./
 ENV NODE_ENV=production
 ENV GIT_WEBUI_HOST=0.0.0.0
-ENV GIT_WEBUI_PORT=3000
-EXPOSE 3000
+ENV GIT_WEBUI_PORT=3001
+EXPOSE 3001
 USER node
 CMD ["node", "dist/index.js"]
 

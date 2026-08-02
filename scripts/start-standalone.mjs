@@ -14,8 +14,8 @@ const packageRoot =
     : scriptDirectory;
 const serverRoot = path.join(packageRoot, 'server');
 const webRoot = path.join(packageRoot, 'web');
-const serverPort = Number(process.env.GIT_WEBUI_SERVER_PORT ?? '3000');
-const webPort = Number(process.env.GIT_WEBUI_WEB_PORT ?? '4173');
+const serverPort = Number(process.env.GIT_WEBUI_SERVER_PORT ?? '3001');
+const webPort = Number(process.env.GIT_WEBUI_WEB_PORT ?? '9001');
 const contentTypes = {
   '.css': 'text/css; charset=utf-8',
   '.html': 'text/html; charset=utf-8',
@@ -94,7 +94,7 @@ const webServer = createServer((request, response) => {
   void serveFile(request, response);
 });
 
-webServer.listen(webPort, '127.0.0.1', () => {
+webServer.listen(webPort, '0.0.0.0', () => {
   log(`Standalone WebUI: http://127.0.0.1:${webPort}`);
 });
 

@@ -1,8 +1,8 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
-const serverPort = Number(process.env.GIT_WEBUI_SERVER_PORT ?? '3000');
-const webPort = Number(process.env.GIT_WEBUI_WEB_PORT ?? '5173');
+const serverPort = Number(process.env.GIT_WEBUI_SERVER_PORT ?? '3001');
+const webPort = Number(process.env.GIT_WEBUI_WEB_PORT ?? '9001');
 const webHost = process.env.GIT_WEBUI_WEB_HOST ?? '0.0.0.0';
 
 export default defineConfig({
@@ -17,6 +17,6 @@ export default defineConfig({
   },
   preview: {
     host: webHost,
-    port: 4173,
+    port: webPort,
   },
 });

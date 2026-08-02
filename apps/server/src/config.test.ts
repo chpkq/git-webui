@@ -3,8 +3,7 @@ import { readServerConfig } from './config.js';
 
 describe('readServerConfig', () => {
   it('defaults to loopback binding', () => {
-    expect(readServerConfig({}).host).toBe('127.0.0.1');
-    expect(readServerConfig({}).role).toBe('admin');
+    expect(readServerConfig({})).toMatchObject({ host: '127.0.0.1', port: 3001, role: 'admin' });
   });
 
   it('rejects remote binding before security gates are complete', () => {

@@ -31,7 +31,7 @@ pnpm test
 pnpm dev
 ```
 
-打开 <http://127.0.0.1:5173> 查看前端。开发前端默认绑定 `0.0.0.0:5173`，后端默认只绑定 <http://127.0.0.1:3000>。
+打开 <http://127.0.0.1:9001> 查看前端。开发前端默认绑定 `0.0.0.0:9001`，后端默认只绑定 <http://127.0.0.1:3001>。
 
 ## 范围边界
 
@@ -75,7 +75,7 @@ pnpm --filter @git-webui/server start
 
 ## 运行与故障排查
 
-- 前端开发服务器：`pnpm --filter @git-webui/web dev`，后端：`pnpm --filter @git-webui/server dev`。Vite 会把 `/health` 和 `/api` 转发到 `127.0.0.1:3000`。
+- 前端开发服务器：`pnpm --filter @git-webui/web dev`，后端：`pnpm --filter @git-webui/server dev`。Vite 会把 `/health` 和 `/api` 转发到 `127.0.0.1:3001`。
 - 首次运行先执行 `pnpm typecheck && pnpm lint && pnpm test`。
 - 主窗口支持 `Ctrl/Cmd + Shift + U` 更新、`Ctrl/Cmd + Shift + P` Pull、`Ctrl/Cmd + Shift + S` Push；输入框获得焦点时不会拦截快捷键。
 - `DIRTY_WORKTREE`、`NO_UPSTREAM`、`NON_FAST_FORWARD`、`AUTH_REQUIRED` 和 `HOST_KEY_REQUIRED` 等错误会显示在 Operation Log；应用不会自动执行 force push、merge、rebase 或历史改写。
@@ -96,7 +96,7 @@ GIT_WEBUI_DATABASE=/Users/you/.local/share/git-webui/data.sqlite \
 corepack pnpm --filter @git-webui/server start
 ```
 
-前端可由 Nginx、Caddy 或其他静态文件服务器发布 `apps/web/dist`，并将 `/api`、`/health` 反向代理到后端 `127.0.0.1:3000`。
+前端可由 Nginx、Caddy 或其他静态文件服务器发布 `apps/web/dist`，并将 `/api`、`/health` 反向代理到后端 `127.0.0.1:3001`。
 
 ### Standalone 目录包
 
@@ -112,7 +112,7 @@ GIT_WEBUI_SESSION_SECRET='use-a-random-secret-at-least-32-chars' \
 node start.mjs
 ```
 
-默认访问 <http://127.0.0.1:4173>。Standalone 启动器只把后端绑定到本机回环地址；需要 LAN/Tailscale 访问时，应放在 HTTPS 反向代理之后，并完成登录、CSRF 和权限配置。
+默认访问 <http://127.0.0.1:9001>。Standalone 启动器把前端发布到所有网卡、后端绑定到本机回环地址；需要 LAN/Tailscale 访问时，应放在 HTTPS 反向代理之后，并完成登录、CSRF 和权限配置。
 
 ### Docker Compose + Nginx
 
@@ -122,10 +122,10 @@ Docker 方式把宿主机工作区映射到容器内 `/workspaces`，并由 `GIT
 cp .env.example .env
 corepack pnpm exec prettier --check docker-compose.yml
 docker compose up -d --build
-curl http://127.0.0.1:8080/health
+curl http://127.0.0.1:9001/health
 ```
 
-默认将 Nginx 发布到 `0.0.0.0:8080`；如需限制到本机，可设置 `GIT_WEBUI_WEB_BIND=127.0.0.1:8080`。通过反向代理或 Tailscale 暴露时，启用 HTTPS 后把 `GIT_WEBUI_COOKIE_SECURE=true`。容器内的 Git 不会自动获得宿主机 SSH Agent、credential helper 或用户级 Git 配置；需要 Push/Pull 时，应按部署平台的安全方式显式提供 SSH Agent/凭据，应用本身仍不保存这些秘密。
+默认将 Nginx 发布到 `0.0.0.0:9001`；如需限制到本机，可设置 `GIT_WEBUI_WEB_BIND=127.0.0.1:9001`。通过反向代理或 Tailscale 暴露时，启用 HTTPS 后把 `GIT_WEBUI_COOKIE_SECURE=true`。容器内的 Git 不会自动获得宿主机 SSH Agent、credential helper 或用户级 Git 配置；需要 Push/Pull 时，应按部署平台的安全方式显式提供 SSH Agent/凭据，应用本身仍不保存这些秘密。
 
 备份 Docker 数据前停止后端容器，备份 `/var/lib/git-webui` 对应的 named volume；恢复后再启动服务。不要只复制正在写入的 SQLite 主文件而忽略 WAL 文件。
 
