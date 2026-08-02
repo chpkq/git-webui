@@ -198,18 +198,6 @@ export const runManagement = async (
   });
 };
 
-export const listOperations = async (repositoryId?: string): Promise<Operation[]> => {
-  const params =
-    repositoryId === undefined ? '' : `?repositoryId=${encodeURIComponent(repositoryId)}`;
-  return await apiRequest<Operation[]>(`/api/operations${params}`);
-};
-
-export const cancelOperation = async (id: string): Promise<Operation> =>
-  await apiRequest<Operation>(`/api/operations/${encodeURIComponent(id)}/cancel`, {
-    method: 'POST',
-    body: JSON.stringify({}),
-  });
-
 const readCookie = (name: string): string | null => {
   const encodedName = `${name}=`;
   const cookie = document.cookie.split('; ').find((item) => item.startsWith(encodedName));

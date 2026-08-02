@@ -94,12 +94,8 @@ test('通过分支圆点切换并在右栏内联查看文件 Diff', async ({ pag
     expect(repositoryId).toBeDefined();
 
     const detailColumn = page.locator('.detail-column');
-    const summaryPanel = detailColumn.locator(':scope > .panel').first();
-    const detailBox = await detailColumn.boundingBox();
-    const emptySummaryBox = await summaryPanel.boundingBox();
-    expect(detailBox).not.toBeNull();
-    expect(emptySummaryBox).not.toBeNull();
-    expect(emptySummaryBox!.height).toBeLessThan(detailBox!.height * 0.5);
+    await expect(detailColumn.locator(':scope > *')).toHaveCount(0);
+    await expect(page.getByText('OPERATION LOG')).toHaveCount(0);
 
     await expect(page.getByText(/LOCAL BRANCHES · 2 · 当前：main/)).toBeVisible();
     await page.getByRole('button', { name: '切换当前分支' }).click();
@@ -110,6 +106,9 @@ test('通过分支圆点切换并在右栏内联查看文件 Diff', async ({ pag
     await expect(page.getByText(/E2E 分支切换仓库 · feature\/history/)).toBeVisible();
     await page.getByRole('button', { name: '关闭', exact: true }).last().click();
 
+    await page.getByRole('tab', { name: 'HISTORY' }).click();
+    await expect(page.getByRole('heading', { name: 'SUMMARY' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'CHANGED FILES' })).toBeVisible();
     await page.getByRole('button', { name: /feature\/history/ }).click();
     await page.getByText('E2E 分支独有提交').click();
     const changedFile = page.getByRole('button', { name: /history-only\.txt/ });
@@ -147,7 +146,11 @@ test('完成注册、Working Copy、同步与 Branch/Remote 管理工作流', as
 
     await writeFile(pathFor(fixture.repositoryPath, 'readme.md'), '# e2e changed\n');
     await page.getByRole('tab', { name: 'WORKING COPY' }).click();
-    await expect(page.getByRole('button', { name: /readme\.md/ })).toBeVisible({ timeout: 10_000 });
+    const workingFile = page.getByRole('button', { name: /readme\.md/ });
+    await expect(workingFile).toBeVisible({ timeout: 10_000 });
+    await workingFile.click();
+    await expect(page.locator('.detail-column .diff-header')).toContainText('readme.md');
+    await expect(page.locator('.history-content .working-diff-pane')).toHaveCount(0);
 
     page.once('dialog', (dialog) => void dialog.accept());
     await page.getByRole('button', { name: 'Stage All', exact: true }).click();
