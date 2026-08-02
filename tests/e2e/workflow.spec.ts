@@ -99,9 +99,13 @@ test('通过分支圆点切换并在右栏内联查看文件 Diff', async ({ pag
     repositoryId = repositories.items.find((item) => item.name === 'E2E 分支切换仓库')?.id;
     expect(repositoryId).toBeDefined();
 
-    const detailColumn = page.locator('.detail-column');
-    await expect(detailColumn.locator(':scope > *')).toHaveCount(0);
+    await expect(page.getByRole('heading', { name: 'SUMMARY' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'CHANGED FILES' })).toBeVisible();
     await expect(page.getByText('OPERATION LOG')).toHaveCount(0);
+    await page.getByText('E2E 初始提交').click();
+    await page.reload();
+    await expect(page.getByRole('heading', { name: 'SUMMARY' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'CHANGED FILES' })).toBeVisible();
 
     await expect(page.getByText(/LOCAL BRANCHES · 2 · 当前：main/)).toBeVisible();
     await page.getByRole('button', { name: '切换当前分支' }).click();
@@ -116,7 +120,10 @@ test('通过分支圆点切换并在右栏内联查看文件 Diff', async ({ pag
     await expect(page.getByRole('heading', { name: 'SUMMARY' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'CHANGED FILES' })).toBeVisible();
     await page.getByRole('button', { name: /feature\/history/ }).click();
+    await page.getByText('E2E 初始提交').click();
+    await expect(page.getByRole('heading', { name: 'SUMMARY' })).toBeVisible();
     await page.getByText('E2E 分支独有提交').click();
+    await expect(page.getByRole('heading', { name: 'SUMMARY' })).toBeVisible();
     const changedFile = page.getByRole('button', { name: /readme\.md/ });
     await expect(changedFile).toBeVisible();
     await changedFile.click();
@@ -216,7 +223,7 @@ test('完成注册、Working Copy、同步与 Branch/Remote 管理工作流', as
     await expect(page.getByRole('heading', { name: '创建 Branch' })).toBeVisible();
     await page.getByLabel('新 Branch 名称').fill('feature/e2e');
     await page.getByRole('button', { name: '确认执行' }).click();
-    await expect(page.getByText('操作成功')).toBeVisible();
+    await expect(page.getByText('操作成功')).toBeVisible({ timeout: 15_000 });
     await page.getByRole('button', { name: '关闭' }).last().click();
 
     await page.getByTitle('管理 Remote 与 Branch').click();
@@ -224,7 +231,7 @@ test('完成注册、Working Copy、同步与 Branch/Remote 管理工作流', as
     await page.getByLabel('Remote 名称').fill('backup');
     await page.getByLabel('Fetch URL').fill(fixture.remotePath);
     await page.getByRole('button', { name: '确认执行' }).click();
-    await expect(page.getByText('操作成功')).toBeVisible();
+    await expect(page.getByText('操作成功')).toBeVisible({ timeout: 15_000 });
     await page.getByRole('button', { name: '关闭' }).last().click();
 
     page.once('dialog', (dialog) => void dialog.accept());

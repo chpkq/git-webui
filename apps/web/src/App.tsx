@@ -70,7 +70,6 @@ function App() {
   const [managementOpen, setManagementOpen] = useState(false);
   const [branchSwitchTarget, setBranchSwitchTarget] = useState<string | null>(null);
   const [workspaceLayout, setWorkspaceLayout] = useState<WorkspaceLayout>(readWorkspaceLayout);
-  const [detailSidebarActivated, setDetailSidebarActivated] = useState(false);
   const [workingCopyPath, setWorkingCopyPath] = useState<string | null>(null);
   const { repositoryId, ref, commitHash, view, setRepositoryId, setRef, setCommitHash, setView } =
     useWorkspaceStore();
@@ -415,10 +414,7 @@ function App() {
               type="button"
               role="tab"
               aria-selected={view === 'history'}
-              onClick={() => {
-                setDetailSidebarActivated(true);
-                setView('history');
-              }}
+              onClick={() => setView('history')}
             >
               HISTORY
             </button>
@@ -427,10 +423,7 @@ function App() {
               type="button"
               role="tab"
               aria-selected={view === 'working'}
-              onClick={() => {
-                setDetailSidebarActivated(true);
-                setView('working');
-              }}
+              onClick={() => setView('working')}
             >
               WORKING COPY
             </button>
@@ -463,15 +456,11 @@ function App() {
           onPointerDown={(event) => startResize('history', event)}
         />
 
-        <aside
-          className={`detail-column ${
-            detailSidebarActivated ? `detail-column-${view}` : 'detail-column-empty'
-          }`}
-        >
-          {detailSidebarActivated && view === 'history' && (
+        <aside className={`detail-column detail-column-${view}`}>
+          {view === 'history' && (
             <SummaryPanel repositoryId={repositoryId} commitHash={commitHash} />
           )}
-          {detailSidebarActivated && view === 'working' && (
+          {view === 'working' && (
             <WorkingCopyDiffPanel
               repositoryId={repositoryId}
               entry={selectedWorkingCopyEntry}
