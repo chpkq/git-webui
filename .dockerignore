@@ -1,0 +1,17 @@
+.git
+.github
+node_modules
+**/node_modules
+**/*.tsbuildinfo
+dist
+**/dist
+coverage
+playwright-report
+test-results
+data/*.sqlite
+data/*.sqlite-*
+release
+*.log
+.env
+.env.*
+!.env.example

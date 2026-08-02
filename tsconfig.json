@@ -1,0 +1,10 @@
+{
+  "files": [],
+  "references": [
+    { "path": "packages/shared" },
+    { "path": "packages/git-core" },
+    { "path": "packages/ui-components" },
+    { "path": "apps/server" },
+    { "path": "apps/web" }
+  ]
+}

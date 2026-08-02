@@ -1,0 +1,156 @@
+import { basename } from 'node:path';
+import {
+  GitWebUiError,
+  type CommitDetail,
+  type CommitPage,
+  type DiffResult,
+  type Locations,
+  type Repository,
+  type RepositoryStatus,
+  type UserRole,
+} from '@git-webui/shared';
+import type { GitProvider } from '@git-webui/git-core';
+import type { RegisterRepositoryInput } from '@git-webui/shared';
+import type { DiffQuery } from '@git-webui/shared';
+import type { RepositoryStore } from './repository-store.js';
+
+export class RepositoryService {
+  private readonly activeOperations = new Map<string, number>();
+
+  public constructor(
+    private readonly store: RepositoryStore,
+    private readonly gitProvider: GitProvider,
+    private readonly role: UserRole = 'admin',
+  ) {}
+
+  public list(): Repository[] {
+    return this.store.list();
+  }
+
+  public async register(input: RegisterRepositoryInput): Promise<Repository> {
+    this.assertCanWrite();
+    const validated = await this.gitProvider.validateRepository(input.path);
+    if (this.store.getByPath(validated.path) !== null) {
+      throw new GitWebUiError('INVALID_REQUEST', '该 Git 仓库已经注册。');
+    }
+    return this.store.create({
+      name: input.name ?? basename(validated.path),
+      path: validated.path,
+    });
+  }
+
+  public remove(id: string): void {
+    this.assertCanWrite();
+    if ((this.activeOperations.get(id) ?? 0) > 0) {
+      throw new GitWebUiError('OPERATION_BUSY', '仓库存在排队或进行中的写操作，暂时不能移除注册。');
+    }
+    if (!this.store.remove(id)) {
+      throw new GitWebUiError('NOT_FOUND', '注册的仓库不存在。');
+    }
+  }
+
+  public beginOperation(id: string): void {
+    this.activeOperations.set(id, (this.activeOperations.get(id) ?? 0) + 1);
+  }
+
+  public endOperation(id: string): void {
+    const count = this.activeOperations.get(id) ?? 0;
+    if (count <= 1) this.activeOperations.delete(id);
+    else this.activeOperations.set(id, count - 1);
+  }
+
+  public get(id: string): Repository {
+    const repository = this.store.getById(id);
+    if (repository === null) throw new GitWebUiError('NOT_FOUND', '注册的仓库不存在。');
+    return repository;
+  }
+
+  private async validateRegistered(id: string): Promise<Repository> {
+    const repository = this.get(id);
+    const validated = await this.gitProvider.validateRepository(repository.path);
+    if (validated.path !== repository.path) {
+      throw new GitWebUiError(
+        'REPOSITORY_CHANGED',
+        '注册后的仓库真实路径已发生变化，请移除后重新注册。',
+      );
+    }
+    return repository;
+  }
+
+  public async getValidated(id: string): Promise<Repository> {
+    return await this.validateRegistered(id);
+  }
+
+  public async getStatus(
+    id: string,
+  ): Promise<{ repository: Repository; status: RepositoryStatus }> {
+    const repository = await this.validateRegistered(id);
+    return { repository, status: await this.gitProvider.getStatus(repository.path) };
+  }
+
+  public async getLocations(id: string): Promise<{ repository: Repository; locations: Locations }> {
+    const repository = await this.validateRegistered(id);
+    return { repository, locations: await this.gitProvider.getLocations(repository.path) };
+  }
+
+  public async getCommits(
+    id: string,
+    ref: string,
+    offset: number,
+    limit: number,
+  ): Promise<{ repository: Repository; page: CommitPage }> {
+    const repository = await this.validateRegistered(id);
+    return {
+      repository,
+      page: await this.gitProvider.getCommitPage(repository.path, ref, offset, limit),
+    };
+  }
+
+  public async getCommitDetail(
+    id: string,
+    commitish: string,
+  ): Promise<{ repository: Repository; detail: CommitDetail }> {
+    const repository = await this.validateRegistered(id);
+    return {
+      repository,
+      detail: await this.gitProvider.getCommitDetail(repository.path, commitish),
+    };
+  }
+
+  public async getDiff(
+    id: string,
+    query: DiffQuery,
+  ): Promise<{ repository: Repository; diff: DiffResult }> {
+    const repository = await this.validateRegistered(id);
+    const result = await this.gitProvider.readDiff(
+      repository.path,
+      query.kind,
+      query.path,
+      query.ref,
+      query.baseRef,
+      query.maxBytes,
+    );
+    return {
+      repository,
+      diff: {
+        path: query.path,
+        kind: query.kind,
+        content: result.content,
+        originalContent: result.originalContent,
+        modifiedContent: result.modifiedContent,
+        binary: result.binary,
+        lfsPointer: result.content.includes('version https://git-lfs.github.com/spec/v1'),
+        truncated: result.truncated,
+        oversize: result.truncated,
+        bytes: result.bytes,
+        lines: result.content === '' ? 0 : result.content.split('\n').length,
+      },
+    };
+  }
+
+  private assertCanWrite(): void {
+    if (this.role === 'viewer') {
+      throw new GitWebUiError('PERMISSION_DENIED', 'Viewer 角色不能修改仓库注册。');
+    }
+  }
+}
