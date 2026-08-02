@@ -68,11 +68,15 @@ describe('operation cancellation', () => {
       const operationPromise = operationService.runRemoteOperation(repository.id, 'fetch', {});
       await running;
       expect(operationId).toBeDefined();
+      expect(() => repositoryService.remove(repository.id)).toThrow(
+        expect.objectContaining({ code: 'OPERATION_BUSY' }),
+      );
       expect(operationService.cancel(operationId!)).toMatchObject({ status: 'running' });
       await expect(operationPromise).resolves.toMatchObject({
         status: 'cancelled',
         error: { code: 'CANCELLED' },
       });
+      expect(() => repositoryService.remove(repository.id)).not.toThrow();
       unsubscribe();
     } finally {
       database.close();

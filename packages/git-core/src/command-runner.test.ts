@@ -22,6 +22,19 @@ describe('CommandRunner', () => {
       }),
     ).rejects.toMatchObject({ code: 'OUTPUT_LIMIT_EXCEEDED' });
   });
+
+  it('returns a bounded truncated result when the caller opts in', async () => {
+    const result = await new CommandRunner().run({
+      cwd: process.cwd(),
+      args: ['--version'],
+      maxOutputBytes: 1,
+      allowTruncated: true,
+    });
+
+    expect(result.truncated).toBe(true);
+    expect(result.stdout.length).toBe(1);
+    expect(result.stdoutBytes).toBeGreaterThan(1);
+  });
 });
 
 describe('redactSensitiveText', () => {

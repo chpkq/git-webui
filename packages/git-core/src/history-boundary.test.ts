@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -24,9 +24,13 @@ describe('commit history boundaries', () => {
       }
       await runGit(repositoryPath, ['branch', 'merge-feature']);
       await runGit(repositoryPath, ['switch', 'merge-feature']);
-      await runGit(repositoryPath, ['commit', '--allow-empty', '-m', 'merge-feature']);
+      await writeFile(path.join(repositoryPath, 'feature.txt'), 'feature\n');
+      await runGit(repositoryPath, ['add', '--', 'feature.txt']);
+      await runGit(repositoryPath, ['commit', '-m', 'merge-feature']);
       await runGit(repositoryPath, ['switch', 'main']);
-      await runGit(repositoryPath, ['commit', '--allow-empty', '-m', 'merge-main']);
+      await writeFile(path.join(repositoryPath, 'main.txt'), 'main\n');
+      await runGit(repositoryPath, ['add', '--', 'main.txt']);
+      await runGit(repositoryPath, ['commit', '-m', 'merge-main']);
       await runGit(repositoryPath, ['merge', '--no-ff', 'merge-feature', '-m', 'merge commit']);
       await runGit(repositoryPath, ['tag', 'v0.1']);
 
@@ -43,6 +47,16 @@ describe('commit history boundaries', () => {
         expect.arrayContaining([expect.stringContaining('tag: v0.1')]),
       );
       expect(firstPage.items[0]?.parents).toHaveLength(2);
+      const mergeDetail = await provider.getCommitDetail(
+        repositoryPath,
+        firstPage.items[0]?.hash ?? 'HEAD',
+      );
+      expect(mergeDetail.changedFiles).toEqual(
+        expect.arrayContaining([expect.objectContaining({ path: 'feature.txt', status: 'added' })]),
+      );
+      await expect(
+        provider.readDiff(repositoryPath, 'commit', 'feature.txt', firstPage.items[0]?.hash),
+      ).resolves.toMatchObject({ content: expect.stringContaining('+feature') });
       expect(new Set(firstPage.items.map((item) => item.hash)).size).toBe(50);
       expect(
         firstPage.items.some((item) => secondPage.items.some((other) => other.hash === item.hash)),

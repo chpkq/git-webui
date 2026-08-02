@@ -15,6 +15,8 @@ import type { DiffQuery } from '@git-webui/shared';
 import type { RepositoryStore } from './repository-store.js';
 
 export class RepositoryService {
+  private readonly activeOperations = new Map<string, number>();
+
   public constructor(
     private readonly store: RepositoryStore,
     private readonly gitProvider: GitProvider,
@@ -39,9 +41,22 @@ export class RepositoryService {
 
   public remove(id: string): void {
     this.assertCanWrite();
+    if ((this.activeOperations.get(id) ?? 0) > 0) {
+      throw new GitWebUiError('OPERATION_BUSY', '仓库存在排队或进行中的写操作，暂时不能移除注册。');
+    }
     if (!this.store.remove(id)) {
       throw new GitWebUiError('NOT_FOUND', '注册的仓库不存在。');
     }
+  }
+
+  public beginOperation(id: string): void {
+    this.activeOperations.set(id, (this.activeOperations.get(id) ?? 0) + 1);
+  }
+
+  public endOperation(id: string): void {
+    const count = this.activeOperations.get(id) ?? 0;
+    if (count <= 1) this.activeOperations.delete(id);
+    else this.activeOperations.set(id, count - 1);
   }
 
   public get(id: string): Repository {
@@ -121,6 +136,8 @@ export class RepositoryService {
         path: query.path,
         kind: query.kind,
         content: result.content,
+        originalContent: result.originalContent,
+        modifiedContent: result.modifiedContent,
         binary: result.binary,
         lfsPointer: result.content.includes('version https://git-lfs.github.com/spec/v1'),
         truncated: result.truncated,

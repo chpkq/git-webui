@@ -76,6 +76,69 @@ describe('GitProvider', () => {
     }
   });
 
+  it('支持未出生 HEAD 的空历史和 Unstage', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'git-webui-unborn-'));
+    const repositoryPath = path.join(root, 'repository');
+    await mkdir(repositoryPath);
+    try {
+      await runGit(repositoryPath, ['init', '-b', 'main']);
+      await writeFile(path.join(repositoryPath, 'first.txt'), 'first\n');
+      const provider = new GitProvider({ allowedRoots: [root] });
+      await expect(provider.getCommitPage(repositoryPath, 'HEAD', 0, 50)).resolves.toEqual({
+        items: [],
+        nextCursor: null,
+        hasMore: false,
+      });
+      await provider.stage(repositoryPath, ['first.txt']);
+      await provider.unstage(repositoryPath, ['first.txt']);
+      await expect(provider.getStatus(repositoryPath)).resolves.toEqual(
+        expect.objectContaining({
+          entries: [expect.objectContaining({ path: 'first.txt', kind: 'untracked' })],
+        }),
+      );
+
+      await writeFile(
+        path.join(repositoryPath, '.gitmodules'),
+        '[submodule "demo"]\n\tpath = modules/demo\n\turl = https://example.com/demo.git\n',
+      );
+      await expect(provider.getLocations(repositoryPath)).resolves.toMatchObject({
+        submodules: [{ name: 'demo', path: 'modules/demo', url: 'https://example.com/demo.git' }],
+      });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('按 Git 的 rename 顺序解析 Commit Detail 文件和统计', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'git-webui-rename-detail-'));
+    const repositoryPath = path.join(root, 'repository');
+    await mkdir(repositoryPath);
+    try {
+      await runGit(repositoryPath, ['init', '-b', 'main']);
+      await runGit(repositoryPath, ['config', 'user.name', 'Rename 测试']);
+      await runGit(repositoryPath, ['config', 'user.email', 'rename@example.com']);
+      await writeFile(path.join(repositoryPath, 'old.txt'), 'old\n');
+      await runGit(repositoryPath, ['add', '--', 'old.txt']);
+      await runGit(repositoryPath, ['commit', '-m', '初始文件']);
+      await runGit(repositoryPath, ['mv', '--', 'old.txt', 'new.txt']);
+      await writeFile(path.join(repositoryPath, 'new.txt'), 'old\nnew\n');
+      await runGit(repositoryPath, ['commit', '-am', '重命名文件']);
+      const provider = new GitProvider({ allowedRoots: [root] });
+      await expect(provider.getCommitDetail(repositoryPath, 'HEAD')).resolves.toMatchObject({
+        changedFiles: [
+          expect.objectContaining({
+            path: 'new.txt',
+            oldPath: 'old.txt',
+            status: 'renamed',
+            additions: 1,
+          }),
+        ],
+      });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it.each([
     [
       'authentication failure',
@@ -88,6 +151,7 @@ describe('GitProvider', () => {
       "fatal: unable to access 'https://example.com/repo.git': Could not resolve host",
       'GIT_COMMAND_FAILED',
     ],
+    ['ff-only divergence', 'fatal: Not possible to fast-forward, aborting.', 'NON_FAST_FORWARD'],
   ])('maps %s to a stable error code', async (_name, stderr, code) => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'git-webui-error-map-'));
     const repositoryPath = path.join(root, 'repository');

@@ -132,6 +132,8 @@ export const diffResultSchema = z.object({
   path: z.string(),
   kind: z.enum(['working', 'staged', 'commit', 'compare']),
   content: z.string(),
+  originalContent: z.string(),
+  modifiedContent: z.string(),
   binary: z.boolean(),
   lfsPointer: z.boolean(),
   truncated: z.boolean(),
@@ -178,8 +180,12 @@ export const preflightSnapshotSchema = z.object({
   head: z.string().nullable(),
   branch: z.string().nullable(),
   upstream: z.string().nullable(),
+  ahead: z.number().int().nonnegative(),
+  behind: z.number().int().nonnegative(),
   dirty: z.boolean(),
   inProgress: z.array(z.string()),
+  workingTreeFingerprint: z.string(),
+  indexFingerprint: z.string(),
 });
 export type PreflightSnapshot = z.infer<typeof preflightSnapshotSchema>;
 

@@ -78,8 +78,8 @@ export class OperationService {
     ) {
       return operation;
     }
-    if (operation.type !== 'fetch' && operation.type !== 'pull' && operation.type !== 'push') {
-      throw new GitWebUiError('OPERATION_BUSY', '当前操作类型不支持取消。');
+    if (operation.type !== 'fetch') {
+      throw new GitWebUiError('OPERATION_BUSY', '只有 Fetch 操作支持安全取消。');
     }
     const controller = this.controllers.get(id);
     if (controller === undefined) {
@@ -98,22 +98,29 @@ export class OperationService {
   ): Promise<Operation> {
     this.assertCanWrite();
     const repository = await this.repositoryService.getValidated(repositoryId);
-    const operation = this.store.create({
-      id: randomUUID(),
-      repositoryId,
-      type,
-      target: { paths: [...paths] },
-    });
+    this.repositoryService.beginOperation(repositoryId);
+    let operation: Operation;
+    try {
+      operation = this.store.create({
+        id: randomUUID(),
+        repositoryId,
+        type,
+        target: sanitizeTarget({ paths: [...paths] }),
+      });
+    } catch (error) {
+      this.repositoryService.endOperation(repositoryId);
+      throw error;
+    }
     this.publish(operation);
     try {
-      const preflight = await this.createPreflight(repository.path);
+      const preflight = await this.createPreflight(repository.path, paths);
       this.publish(this.store.setPreflight(operation.id, preflight));
       this.assertPreflightReady(preflight);
       const completed = await this.queue.run(repositoryId, async () => {
         const running = this.store.setRunning(operation.id);
         this.publish(running);
         try {
-          const currentPreflight = await this.createPreflight(repository.path);
+          const currentPreflight = await this.createPreflight(repository.path, paths);
           this.assertPreflightStable(preflight, currentPreflight);
           this.assertPreflightReady(currentPreflight);
           if (type === 'stage') await this.gitProvider.stage(repository.path, paths);
@@ -164,6 +171,8 @@ export class OperationService {
       });
       this.publish(failed);
       return failed;
+    } finally {
+      this.repositoryService.endOperation(repositoryId);
     }
   }
 
@@ -175,7 +184,20 @@ export class OperationService {
   ): Promise<Operation> {
     this.assertCanWrite();
     const repository = await this.repositoryService.getValidated(repositoryId);
-    const operation = this.store.create({ id: randomUUID(), repositoryId, type, target });
+    const safeTarget = sanitizeTarget(target);
+    this.repositoryService.beginOperation(repositoryId);
+    let operation: Operation;
+    try {
+      operation = this.store.create({
+        id: randomUUID(),
+        repositoryId,
+        type,
+        target: safeTarget,
+      });
+    } catch (error) {
+      this.repositoryService.endOperation(repositoryId);
+      throw error;
+    }
     this.publish(operation);
     const requireClean = type === 'pull';
     const controller = new AbortController();
@@ -196,11 +218,12 @@ export class OperationService {
           this.assertPreflightStable(preflight, currentPreflight);
           this.assertPreflightReady(currentPreflight, requireClean);
           const reportProgress = (text: string): void => {
-            if (text === '') return;
+            const safeText = redactSensitiveText(text);
+            if (safeText === '') return;
             this.publish(
               this.store.setProgress(operation.id, {
-                text: text.slice(-1000),
-                percent: parseProgressPercent(text),
+                text: safeText.slice(-1000),
+                percent: parseProgressPercent(safeText),
               }),
             );
           };
@@ -217,13 +240,13 @@ export class OperationService {
               controller.signal,
             );
           } else {
-            const remote = readStringTarget(target, 'remote');
-            const branch = readStringTarget(target, 'branch');
+            const remote = readStringTarget(safeTarget, 'remote');
+            const branch = readStringTarget(safeTarget, 'branch');
             await this.gitProvider.pushExplicit(
               repository.path,
               remote,
               branch,
-              target.setUpstream === true,
+              safeTarget.setUpstream === true,
               reportProgress,
               controller.signal,
             );
@@ -253,6 +276,7 @@ export class OperationService {
     } finally {
       this.controllers.delete(operation.id);
       this.cancelled.delete(operation.id);
+      this.repositoryService.endOperation(repositoryId);
     }
   }
 
@@ -276,12 +300,19 @@ export class OperationService {
   ): Promise<Operation> {
     this.assertManagementPermission(type);
     const repository = await this.repositoryService.getValidated(repositoryId);
-    const operation = this.store.create({
-      id: randomUUID(),
-      repositoryId,
-      type,
-      target: sanitizeTarget(target),
-    });
+    this.repositoryService.beginOperation(repositoryId);
+    let operation: Operation;
+    try {
+      operation = this.store.create({
+        id: randomUUID(),
+        repositoryId,
+        type,
+        target: sanitizeTarget(target),
+      });
+    } catch (error) {
+      this.repositoryService.endOperation(repositoryId);
+      throw error;
+    }
     this.publish(operation);
     try {
       const preflight = await this.createPreflight(repository.path);
@@ -294,11 +325,12 @@ export class OperationService {
           this.assertPreflightStable(preflight, currentPreflight);
           this.assertPreflightReady(currentPreflight, requireClean);
           await executor(repository.path, (text) => {
-            if (text === '') return;
+            const safeText = redactSensitiveText(text);
+            if (safeText === '') return;
             this.publish(
               this.store.setProgress(operation.id, {
-                text: text.slice(-1000),
-                percent: parseProgressPercent(text),
+                text: safeText.slice(-1000),
+                percent: parseProgressPercent(safeText),
               }),
             );
           });
@@ -323,6 +355,8 @@ export class OperationService {
       });
     } catch (error) {
       return this.finishFailure(operation.id, repositoryId, actor, type, error);
+    } finally {
+      this.repositoryService.endOperation(repositoryId);
     }
   }
 
@@ -351,14 +385,21 @@ export class OperationService {
     return failed;
   }
 
-  private async createPreflight(repositoryPath: string): Promise<PreflightSnapshot> {
+  private async createPreflight(
+    repositoryPath: string,
+    paths: readonly string[] = [],
+  ): Promise<PreflightSnapshot> {
     const status = await this.gitProvider.getStatus(repositoryPath);
+    const fingerprints = await this.gitProvider.getStateFingerprints(repositoryPath, paths);
     return {
       head: status.head,
       branch: status.branch,
       upstream: status.upstream,
+      ahead: status.ahead,
+      behind: status.behind,
       dirty: status.dirty,
       inProgress: status.inProgress,
+      ...fingerprints,
     };
   }
 
@@ -377,6 +418,12 @@ export class OperationService {
     if (
       before.head !== current.head ||
       before.branch !== current.branch ||
+      before.upstream !== current.upstream ||
+      before.ahead !== current.ahead ||
+      before.behind !== current.behind ||
+      before.dirty !== current.dirty ||
+      before.workingTreeFingerprint !== current.workingTreeFingerprint ||
+      before.indexFingerprint !== current.indexFingerprint ||
       before.inProgress.join(',') !== current.inProgress.join(',')
     ) {
       throw new GitWebUiError('REPOSITORY_CHANGED', '预检后仓库状态发生变化，请重新确认操作。');
@@ -437,12 +484,18 @@ const parseProgressPercent = (text: string): number | null => {
 };
 
 const sanitizeTarget = (target: Record<string, unknown>): Record<string, unknown> =>
-  Object.fromEntries(
-    Object.entries(target).map(([key, value]) => [
-      key,
-      typeof value === 'string' ? redactSensitiveText(value) : value,
-    ]),
-  );
+  sanitizeValue(target) as Record<string, unknown>;
+
+const sanitizeValue = (value: unknown): unknown => {
+  if (typeof value === 'string') return redactSensitiveText(value);
+  if (Array.isArray(value)) return value.map(sanitizeValue);
+  if (value !== null && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, nestedValue]) => [key, sanitizeValue(nestedValue)]),
+    );
+  }
+  return value;
+};
 
 const toOperationError = (error: unknown): { code: string; message: string } => {
   if (error instanceof GitWebUiError) return { code: error.code, message: error.message };

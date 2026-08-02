@@ -1,4 +1,5 @@
-import { access } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { access, lstat, open, readlink, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import {
   GitWebUiError,
@@ -31,6 +32,7 @@ import {
 } from './path-security.js';
 
 const RECORD_SEPARATOR = '\u001e';
+const MAX_FINGERPRINT_SAMPLE_BYTES = 1024 * 1024;
 
 export interface GitProviderOptions {
   allowedRoots: readonly string[];
@@ -73,6 +75,7 @@ export class GitProvider {
     args: readonly string[],
     onOutput?: (stream: 'stdout' | 'stderr', chunk: string) => void,
     signal?: AbortSignal,
+    options?: { maxOutputBytes?: number; allowTruncated?: boolean },
   ): Promise<CommandResult> {
     const validated = await this.validateRepository(repositoryPath);
     return await this.runner.run({
@@ -86,6 +89,7 @@ export class GitProvider {
       },
       onOutput,
       signal,
+      ...options,
     });
   }
 
@@ -117,7 +121,11 @@ export class GitProvider {
     if (lower.includes('host key verification failed')) {
       return new GitWebUiError('HOST_KEY_REQUIRED', 'Git 远程主机未通过 SSH Host Key 校验。');
     }
-    if (lower.includes('non-fast-forward') || lower.includes('fetch first')) {
+    if (
+      lower.includes('non-fast-forward') ||
+      lower.includes('fetch first') ||
+      lower.includes('not possible to fast-forward')
+    ) {
       return new GitWebUiError('NON_FAST_FORWARD', '远程分支不是本地分支的快进目标。');
     }
     if (lower.includes('conflict') || lower.includes('automatic merge failed')) {
@@ -140,6 +148,73 @@ export class GitProvider {
     return toRepositoryStatus(parsed, inProgress);
   }
 
+  public async getStateFingerprints(
+    repositoryPath: string,
+    paths: readonly string[] = [],
+  ): Promise<{ workingTreeFingerprint: string; indexFingerprint: string }> {
+    const safePaths = paths.map((filePath) => validateRelativePath(filePath));
+    const statusPaths =
+      safePaths.length > 0
+        ? []
+        : (await this.getParsedStatus(repositoryPath)).entries.flatMap((entry) =>
+            'renameFrom' in entry && entry.renameFrom !== undefined
+              ? [entry.path, entry.renameFrom]
+              : [entry.path],
+          );
+    const fingerprintPaths = [...new Set([...safePaths, ...statusPaths])].sort();
+    const pathArgs = ['--', ...safePaths];
+    const [workingTree, index] = await Promise.all([
+      this.executeChecked(repositoryPath, [
+        'diff-files',
+        '--raw',
+        '--no-renames',
+        '-z',
+        ...pathArgs,
+      ]),
+      this.executeChecked(repositoryPath, [
+        'diff',
+        '--cached',
+        '--raw',
+        '--no-renames',
+        '-z',
+        ...pathArgs,
+      ]),
+    ]);
+    const validated =
+      fingerprintPaths.length > 0 ? await this.validateRepository(repositoryPath) : null;
+    const workingTreeHash = createHash('sha256').update(workingTree.stdout);
+    if (validated !== null) {
+      for (const filePath of fingerprintPaths) {
+        const candidate = path.resolve(validated.path, filePath);
+        workingTreeHash.update(`\0${filePath}`);
+        try {
+          const info = await lstat(candidate);
+          if (info.isSymbolicLink()) {
+            workingTreeHash.update(`symlink:${await readlink(candidate)}`);
+          } else if (info.isFile()) {
+            workingTreeHash.update(`${info.size}:${info.mtimeMs}:${info.ctimeMs}:${info.mode}`);
+            const handle = await open(candidate, 'r');
+            try {
+              const sample = Buffer.alloc(Math.min(info.size, MAX_FINGERPRINT_SAMPLE_BYTES));
+              const read = await handle.read(sample, 0, sample.byteLength, 0);
+              workingTreeHash.update(sample.subarray(0, read.bytesRead));
+            } finally {
+              await handle.close();
+            }
+          } else {
+            workingTreeHash.update(`other:${info.mode}`);
+          }
+        } catch {
+          workingTreeHash.update('missing');
+        }
+      }
+    }
+    return {
+      workingTreeFingerprint: workingTreeHash.digest('hex'),
+      indexFingerprint: createHash('sha256').update(index.stdout).digest('hex'),
+    };
+  }
+
   public async fetchAllPrune(
     repositoryPath: string,
     onProgress?: (text: string) => void,
@@ -149,7 +224,7 @@ export class GitProvider {
       repositoryPath,
       ['fetch', '--all', '--prune', '--progress'],
       (_stream, chunk) => {
-        onProgress?.(chunk.trim());
+        onProgress?.(redactSensitiveText(chunk.trim()));
       },
       signal,
     );
@@ -164,7 +239,7 @@ export class GitProvider {
       repositoryPath,
       ['pull', '--ff-only', '--progress'],
       (_stream, chunk) => {
-        onProgress?.(chunk.trim());
+        onProgress?.(redactSensitiveText(chunk.trim()));
       },
       signal,
     );
@@ -180,14 +255,31 @@ export class GitProvider {
   ): Promise<void> {
     validateGitName(remote, 'remote');
     validateGitName(branch, 'branch');
+    const configuredRemotes = (await this.executeChecked(repositoryPath, ['remote'])).stdout
+      .split('\n')
+      .map((name) => name.trim())
+      .filter(Boolean);
+    if (!configuredRemotes.includes(remote)) {
+      throw new GitWebUiError('INVALID_REMOTE', 'Push 目标 Remote 未在当前仓库配置。', { remote });
+    }
+    const localBranch = `refs/heads/${branch}`;
+    const branchResult = await this.execute(repositoryPath, [
+      'show-ref',
+      '--verify',
+      '--quiet',
+      localBranch,
+    ]);
+    if (branchResult.exitCode !== 0) {
+      throw new GitWebUiError('INVALID_BRANCH', 'Push 目标本地 Branch 不存在。', { branch });
+    }
     const args = ['push', '--progress'];
     if (setUpstream) args.push('--set-upstream');
-    args.push(remote, branch);
+    args.push(remote, `${localBranch}:${localBranch}`);
     await this.executeChecked(
       repositoryPath,
       args,
       (_stream, chunk) => {
-        onProgress?.(chunk.trim());
+        onProgress?.(redactSensitiveText(chunk.trim()));
       },
       signal,
     );
@@ -201,10 +293,19 @@ export class GitProvider {
   ): Promise<void> {
     validateGitName(name, 'remote');
     validateGitUrl(fetchUrl);
+    if (pushUrl !== undefined) validateGitUrl(pushUrl);
     await this.executeChecked(repositoryPath, ['remote', 'add', name, fetchUrl]);
     if (pushUrl !== undefined && pushUrl !== fetchUrl) {
-      validateGitUrl(pushUrl);
-      await this.executeChecked(repositoryPath, ['remote', 'set-url', '--push', name, pushUrl]);
+      try {
+        await this.executeChecked(repositoryPath, ['remote', 'set-url', '--push', name, pushUrl]);
+      } catch (error) {
+        try {
+          await this.execute(repositoryPath, ['remote', 'remove', name]);
+        } catch {
+          // 回滚失败时仍保留原始 Push URL 错误，避免掩盖真正原因。
+        }
+        throw error;
+      }
     }
   }
 
@@ -431,6 +532,8 @@ export class GitProvider {
   private async getSubmodules(repositoryPath: string): Promise<Submodule[]> {
     const result = await this.execute(repositoryPath, [
       'config',
+      '--file',
+      '.gitmodules',
       '--null',
       '--get-regexp',
       '^submodule\\..*\\.(path|url)$',
@@ -438,11 +541,13 @@ export class GitProvider {
     if (result.exitCode !== 0) {
       return [];
     }
-    const values = result.stdout.split('\0').filter(Boolean);
+    const records = result.stdout.split('\0').filter(Boolean);
     const modules = new Map<string, { path?: string; url?: string }>();
-    for (let index = 0; index + 1 < values.length; index += 2) {
-      const key = values[index] ?? '';
-      const value = values[index + 1] ?? '';
+    for (const record of records) {
+      const separator = record.indexOf('\n');
+      if (separator < 0) continue;
+      const key = record.slice(0, separator);
+      const value = record.slice(separator + 1);
       const match = key.match(/^submodule\.(.+)\.(path|url)$/);
       if (match === null) continue;
       const name = match[1] ?? '';
@@ -495,22 +600,28 @@ export class GitProvider {
     kind: 'working' | 'staged' | 'commit' | 'compare',
     ref?: string,
     baseRef?: string,
+    parentRef?: string,
   ): Promise<ChangedFile[]> {
+    const safeRef = ref === undefined ? 'HEAD' : validateCommitish(ref);
+    const safeBaseRef = baseRef === undefined ? 'HEAD' : validateCommitish(baseRef);
+    const safeParentRef = parentRef === undefined ? undefined : validateCommitish(parentRef);
     const args =
-      kind === 'commit'
-        ? [
-            'diff-tree',
-            '--root',
-            '--no-commit-id',
-            '--name-status',
-            '-z',
-            '-r',
-            '--find-renames',
-            ref ?? 'HEAD',
-          ]
-        : ['diff', '--name-status', '-z', '--find-renames'];
+      kind === 'commit' && safeParentRef !== undefined
+        ? ['diff', '--name-status', '-z', '--find-renames', safeParentRef, safeRef]
+        : kind === 'commit'
+          ? [
+              'diff-tree',
+              '--root',
+              '--no-commit-id',
+              '--name-status',
+              '-z',
+              '-r',
+              '--find-renames',
+              safeRef,
+            ]
+          : ['diff', '--name-status', '-z', '--find-renames'];
     if (kind === 'staged') args.push('--cached');
-    else if (kind === 'compare') args.push(`${baseRef ?? 'HEAD'}...${ref ?? 'HEAD'}`);
+    else if (kind === 'compare') args.push(`${safeBaseRef}...${safeRef}`);
     args.push('--');
     const result = await this.executeChecked(repositoryPath, args);
     return parseNameStatus(result.stdout);
@@ -523,6 +634,10 @@ export class GitProvider {
     limit: number,
   ): Promise<CommitPage> {
     const safeRef = validateCommitish(ref);
+    const status = await this.getParsedStatus(repositoryPath);
+    if (safeRef === 'HEAD' && status.head === null) {
+      return { items: [], nextCursor: null, hasMore: false };
+    }
     const result = await this.executeChecked(repositoryPath, [
       'log',
       '--topo-order',
@@ -536,11 +651,11 @@ export class GitProvider {
     const records = parseCommitRecords(result.stdout);
     const hasMore = records.length > limit;
     const pageRecords = records.slice(0, limit);
-    const items = await Promise.all(
-      pageRecords.map(async (record) => {
-        const stats = await this.getCommitStats(repositoryPath, record.hash);
-        return toCommitSummary(record, stats);
-      }),
+    const items = await mapWithConcurrency(pageRecords, 8, async (record) =>
+      toCommitSummary(
+        record,
+        await this.getCommitStats(repositoryPath, record.hash, record.parents[0]),
+      ),
     );
     return {
       items,
@@ -552,8 +667,8 @@ export class GitProvider {
   public async getCommitDetail(repositoryPath: string, commitish: string): Promise<CommitDetail> {
     const commit = await this.getCommit(repositoryPath, commitish);
     const [changedFiles, stats] = await Promise.all([
-      this.getChangedFiles(repositoryPath, 'commit', commit.hash),
-      this.getCommitFileStats(repositoryPath, commit.hash),
+      this.getChangedFiles(repositoryPath, 'commit', commit.hash, undefined, commit.parents[0]),
+      this.getCommitFileStats(repositoryPath, commit.hash, commit.parents[0]),
     ]);
     const files = changedFiles.map((file) => {
       const fileStats = stats.get(file.path);
@@ -575,8 +690,12 @@ export class GitProvider {
     };
   }
 
-  private async getCommitStats(repositoryPath: string, commitish: string): Promise<CommitStats> {
-    const stats = await this.getCommitFileStats(repositoryPath, commitish);
+  private async getCommitStats(
+    repositoryPath: string,
+    commitish: string,
+    parentRef?: string,
+  ): Promise<CommitStats> {
+    const stats = await this.getCommitFileStats(repositoryPath, commitish, parentRef);
     let additions = 0;
     let deletions = 0;
     let hasBinary = false;
@@ -598,27 +717,42 @@ export class GitProvider {
   private async getCommitFileStats(
     repositoryPath: string,
     commitish: string,
+    parentRef?: string,
   ): Promise<Map<string, { additions: number | null; deletions: number | null; binary: boolean }>> {
-    const result = await this.executeChecked(repositoryPath, [
-      'diff-tree',
-      '--root',
-      '--no-commit-id',
-      '--numstat',
-      '-z',
-      '-r',
-      '--find-renames',
-      commitish,
-      '--',
-    ]);
+    const safeCommitish = validateCommitish(commitish);
+    const safeParentRef = parentRef === undefined ? undefined : validateCommitish(parentRef);
+    const result = await this.executeChecked(
+      repositoryPath,
+      safeParentRef === undefined
+        ? [
+            'diff-tree',
+            '--root',
+            '--no-commit-id',
+            '--numstat',
+            '-z',
+            '-r',
+            '--find-renames',
+            safeCommitish,
+            '--',
+          ]
+        : ['diff', '--numstat', '-z', '--find-renames', safeParentRef, safeCommitish, '--'],
+    );
     const stats = new Map<
       string,
       { additions: number | null; deletions: number | null; binary: boolean }
     >();
-    for (const record of result.stdout.split('\0')) {
+    const records = result.stdout.split('\0');
+    for (let index = 0; index < records.length; index += 1) {
+      const record = records[index] ?? '';
       if (record === '') continue;
       const fields = record.split('\t');
       if (fields.length < 3) continue;
-      const pathValue = fields.slice(2).join('\t');
+      let pathValue = fields.slice(2).join('\t');
+      if (pathValue === '' && index + 2 < records.length) {
+        index += 1;
+        pathValue = records[index + 1] ?? '';
+        index += 1;
+      }
       const binary = fields[0] === '-' || fields[1] === '-';
       stats.set(pathValue, {
         additions: binary ? null : Number(fields[0]),
@@ -636,46 +770,220 @@ export class GitProvider {
     ref?: string,
     baseRef?: string,
     maxBytes = 2 * 1024 * 1024,
-  ): Promise<{ content: string; binary: boolean; truncated: boolean; bytes: number }> {
+  ): Promise<{
+    content: string;
+    originalContent: string;
+    modifiedContent: string;
+    binary: boolean;
+    truncated: boolean;
+    bytes: number;
+  }> {
     const safePath = validateRelativePath(filePath);
-    const args =
-      kind === 'commit'
-        ? [
-            'diff-tree',
-            '--root',
-            '--no-commit-id',
-            '--patch',
-            '--find-renames',
-            '--unified=3',
-            ref ?? 'HEAD',
-          ]
-        : ['diff', '--no-ext-diff', '--unified=3'];
+    const safeRef = ref === undefined ? 'HEAD' : validateCommitish(ref);
+    const safeBaseRef = baseRef === undefined ? 'HEAD' : validateCommitish(baseRef);
+    let args: string[];
+    let commit: GitCommitRecord | undefined;
+    if (kind === 'commit') {
+      commit = await this.getCommit(repositoryPath, safeRef);
+      args =
+        commit.parents[0] === undefined
+          ? [
+              'diff-tree',
+              '--root',
+              '--no-commit-id',
+              '--patch',
+              '--find-renames',
+              '--unified=3',
+              commit.hash,
+            ]
+          : [
+              'diff',
+              '--no-ext-diff',
+              '--patch',
+              '--find-renames',
+              '--unified=3',
+              commit.parents[0],
+              commit.hash,
+            ];
+    } else {
+      args = ['diff', '--no-ext-diff', '--unified=3'];
+    }
     if (kind === 'staged') args.push('--cached');
-    else if (kind === 'compare') args.push(`${baseRef ?? 'HEAD'}...${ref ?? 'HEAD'}`);
+    else if (kind === 'compare') args.push(`${safeBaseRef}...${safeRef}`);
     args.push('--', safePath);
-    let result = await this.execute(repositoryPath, args);
-    if (result.exitCode !== 0 && result.exitCode !== 1) throw this.mapCommandFailure(result);
+    const safeMaxBytes = Math.min(Math.max(1, maxBytes), 10 * 1024 * 1024);
+    let result = await this.execute(repositoryPath, args, undefined, undefined, {
+      maxOutputBytes: safeMaxBytes,
+      allowTruncated: true,
+    });
+    if (!result.truncated && result.exitCode !== 0 && result.exitCode !== 1) {
+      throw this.mapCommandFailure(result);
+    }
     if (kind === 'working' && result.stdout === '') {
-      result = await this.execute(repositoryPath, [
-        'diff',
-        '--no-index',
-        '--no-ext-diff',
-        '--unified=3',
-        '--',
-        '/dev/null',
-        safePath,
-      ]);
-      if (result.exitCode !== 0 && result.exitCode !== 1) throw this.mapCommandFailure(result);
+      const status = await this.getStatus(repositoryPath);
+      const isUntracked = status.entries.some(
+        (entry) => entry.kind === 'untracked' && entry.path === safePath,
+      );
+      if (isUntracked && (await this.isSafeUntrackedFile(repositoryPath, safePath))) {
+        result = await this.execute(
+          repositoryPath,
+          ['diff', '--no-index', '--no-ext-diff', '--unified=3', '--', '/dev/null', safePath],
+          undefined,
+          undefined,
+          { maxOutputBytes: safeMaxBytes, allowTruncated: true },
+        );
+        if (!result.truncated && result.exitCode !== 0 && result.exitCode !== 1) {
+          throw this.mapCommandFailure(result);
+        }
+      }
     }
     const content = result.stdout;
-    const bytes = Buffer.byteLength(content, 'utf8');
-    const binary = content.includes('Binary files') || content.includes('GIT binary patch');
+    const fileContents =
+      result.truncated || content === ''
+        ? { original: '', modified: '', bytes: 0, truncated: false, binary: false }
+        : await this.getDiffFileContents(
+            repositoryPath,
+            kind,
+            safePath,
+            safeRef,
+            safeBaseRef,
+            commit,
+            safeMaxBytes,
+          );
+    const bytes = Math.max(result.stdoutBytes, fileContents.bytes);
+    const binary =
+      content.includes('Binary files') ||
+      content.includes('GIT binary patch') ||
+      fileContents.binary;
     return {
-      content: bytes > maxBytes ? content.slice(0, maxBytes) : content,
+      content: sliceUtf8ByBytes(content, safeMaxBytes),
+      originalContent: fileContents.original,
+      modifiedContent: fileContents.modified,
       binary,
-      truncated: bytes > maxBytes,
+      truncated: result.truncated || fileContents.truncated || bytes > safeMaxBytes,
       bytes,
     };
+  }
+
+  private async getDiffFileContents(
+    repositoryPath: string,
+    kind: 'working' | 'staged' | 'commit' | 'compare',
+    filePath: string,
+    ref: string,
+    baseRef: string,
+    commit: GitCommitRecord | undefined,
+    maxBytes: number,
+  ): Promise<{
+    original: string;
+    modified: string;
+    bytes: number;
+    truncated: boolean;
+    binary: boolean;
+  }> {
+    let originalSpec: string | null;
+    let modifiedSpec: string | null;
+    let readWorkingTree = false;
+    switch (kind) {
+      case 'working':
+        originalSpec = `:${filePath}`;
+        modifiedSpec = null;
+        readWorkingTree = true;
+        break;
+      case 'staged':
+        originalSpec = `${ref}:${filePath}`;
+        modifiedSpec = `:${filePath}`;
+        break;
+      case 'commit':
+        originalSpec = commit?.parents[0] === undefined ? null : `${commit.parents[0]}:${filePath}`;
+        modifiedSpec = commit === undefined ? null : `${commit.hash}:${filePath}`;
+        break;
+      case 'compare':
+        originalSpec = `${baseRef}:${filePath}`;
+        modifiedSpec = `${ref}:${filePath}`;
+        break;
+    }
+    const original =
+      originalSpec === null ? null : await this.readGitBlob(repositoryPath, originalSpec, maxBytes);
+    const modified = readWorkingTree
+      ? await this.readWorkingTreeFile(repositoryPath, filePath, maxBytes)
+      : modifiedSpec === null
+        ? null
+        : await this.readGitBlob(repositoryPath, modifiedSpec, maxBytes);
+    const values = [original, modified].filter(
+      (value): value is { content: string; bytes: number; truncated: boolean } => value !== null,
+    );
+    return {
+      original: original?.content ?? '',
+      modified: modified?.content ?? '',
+      bytes: values.reduce((sum, value) => Math.max(sum, value.bytes), 0),
+      truncated: values.some((value) => value.truncated),
+      binary: values.some((value) => value.content.includes('\0')),
+    };
+  }
+
+  private async readGitBlob(
+    repositoryPath: string,
+    spec: string,
+    maxBytes: number,
+  ): Promise<{ content: string; bytes: number; truncated: boolean } | null> {
+    const result = await this.execute(
+      repositoryPath,
+      ['cat-file', 'blob', spec],
+      undefined,
+      undefined,
+      {
+        maxOutputBytes: maxBytes,
+        allowTruncated: true,
+      },
+    );
+    if (result.exitCode !== 0 && !result.truncated) return null;
+    return {
+      content: result.stdout,
+      bytes: result.stdoutBytes,
+      truncated: result.truncated,
+    };
+  }
+
+  private async readWorkingTreeFile(
+    repositoryPath: string,
+    filePath: string,
+    maxBytes: number,
+  ): Promise<{ content: string; bytes: number; truncated: boolean } | null> {
+    const repository = await this.validateRepository(repositoryPath);
+    const candidate = path.resolve(repository.path, filePath);
+    try {
+      const info = await lstat(candidate);
+      if (info.isSymbolicLink()) {
+        const content = await readlink(candidate);
+        return { content, bytes: Buffer.byteLength(content), truncated: false };
+      }
+      if (!info.isFile()) return null;
+      const resolved = await realpath(candidate);
+      const relative = path.relative(repository.path, resolved);
+      if (
+        relative !== '' &&
+        (relative.startsWith('..') ||
+          path.isAbsolute(relative) ||
+          relative.split(path.sep).includes('.git'))
+      ) {
+        return null;
+      }
+      const handle = await open(candidate, 'r');
+      try {
+        const buffer = Buffer.alloc(Math.min(info.size, maxBytes + 1));
+        const read = await handle.read(buffer, 0, buffer.byteLength, 0);
+        const truncated = read.bytesRead > maxBytes || info.size > maxBytes;
+        return {
+          content: buffer.subarray(0, Math.min(read.bytesRead, maxBytes)).toString('utf8'),
+          bytes: info.size,
+          truncated,
+        };
+      } finally {
+        await handle.close();
+      }
+    } catch {
+      return null;
+    }
   }
 
   public async stage(repositoryPath: string, paths: readonly string[]): Promise<void> {
@@ -683,8 +991,35 @@ export class GitProvider {
     await this.executeChecked(repositoryPath, ['add', '--', ...safePaths]);
   }
 
+  private async isSafeUntrackedFile(repositoryPath: string, filePath: string): Promise<boolean> {
+    const repository = await this.validateRepository(repositoryPath);
+    const candidate = path.resolve(repository.path, filePath);
+    try {
+      const info = await lstat(candidate);
+      if (!info.isFile()) return false;
+      const resolved = await realpath(candidate);
+      const relative = path.relative(repository.path, resolved);
+      return (
+        (relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative))) &&
+        !relative.split(path.sep).includes('.git')
+      );
+    } catch {
+      return false;
+    }
+  }
+
   public async unstage(repositoryPath: string, paths: readonly string[]): Promise<void> {
     const safePaths = paths.map((filePath) => validateRelativePath(filePath));
+    const status = await this.getParsedStatus(repositoryPath);
+    if (status.head === null) {
+      await this.executeChecked(repositoryPath, [
+        'update-index',
+        '--force-remove',
+        '--',
+        ...safePaths,
+      ]);
+      return;
+    }
     await this.executeChecked(repositoryPath, ['restore', '--staged', '--', ...safePaths]);
   }
 
@@ -721,6 +1056,30 @@ const pathExists = async (candidate: string): Promise<boolean> => {
   }
 };
 
+const sliceUtf8ByBytes = (value: string, maxBytes: number): string => {
+  const buffer = Buffer.from(value, 'utf8');
+  return buffer.byteLength > maxBytes ? buffer.subarray(0, maxBytes).toString('utf8') : value;
+};
+
+const mapWithConcurrency = async <T, R>(
+  values: readonly T[],
+  concurrency: number,
+  mapper: (value: T) => Promise<R>,
+): Promise<R[]> => {
+  const results = new Array<R>(values.length);
+  let nextIndex = 0;
+  const worker = async (): Promise<void> => {
+    while (true) {
+      const index = nextIndex;
+      nextIndex += 1;
+      if (index >= values.length) return;
+      results[index] = await mapper(values[index] as T);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(concurrency, values.length) }, worker));
+  return results;
+};
+
 const parseNameStatus = (output: string): ChangedFile[] => {
   const tokens = output.split('\0').filter(Boolean);
   const files: ChangedFile[] = [];
@@ -736,10 +1095,11 @@ const parseNameStatus = (output: string): ChangedFile[] => {
     else if (statusCode === 'R') status = 'renamed';
     else if (statusCode === 'C') status = 'copied';
     else if (statusCode === 'U') status = 'unmerged';
-    const oldPath = status === 'renamed' || status === 'copied' ? tokens[index + 1] : undefined;
+    const oldPath = status === 'renamed' || status === 'copied' ? pathValue : undefined;
+    const newPath = oldPath === undefined ? pathValue : (tokens[index + 1] ?? '');
     if (oldPath !== undefined) index += 1;
     files.push({
-      path: pathValue,
+      path: newPath,
       status,
       ...(oldPath === undefined ? {} : { oldPath }),
       additions: null,

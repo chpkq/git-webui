@@ -8,5 +8,6 @@ try {
   await app.listen({ host: config.host, port: config.port });
 } catch (error) {
   app.log.error(error);
+  await app.close();
   process.exitCode = 1;
 }

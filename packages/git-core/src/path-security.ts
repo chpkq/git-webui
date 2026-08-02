@@ -28,14 +28,18 @@ const realpathOrSkip = async (candidate: string): Promise<string | null> => {
 };
 
 export const validateRelativePath = (value: string): string => {
+  const segments = value.split(/[\\/]/u);
   if (
     value.length === 0 ||
     value.includes('\0') ||
     path.isAbsolute(value) ||
     path.win32.isAbsolute(value) ||
-    value.split(/[\\/]/u).some((segment) => segment === '..')
+    segments.some((segment) => segment === '..' || segment === '.git')
   ) {
-    throw new GitWebUiError('INVALID_PATH', '文件路径必须是仓库内的相对路径。');
+    throw new GitWebUiError(
+      'INVALID_PATH',
+      '文件路径必须是仓库内且不包含 Git 元数据目录的相对路径。',
+    );
   }
   return value;
 };
@@ -49,6 +53,14 @@ export const validateGitName = (value: string, kind: 'ref' | 'remote' | 'branch'
     value.includes('..') ||
     value.includes('@{') ||
     value.includes('\\') ||
+    value.includes(':') ||
+    value.includes('~') ||
+    value.includes('^') ||
+    value.includes('?') ||
+    value.includes('*') ||
+    value.includes('[') ||
+    value.includes(']') ||
+    value.startsWith('+') ||
     value.includes('//') ||
     value.endsWith('/') ||
     value.endsWith('.') ||
