@@ -1,9 +1,10 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { DiffEditor } from '@monaco-editor/react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { FileStatus, RepositoryStatus } from '@git-webui/shared';
 import { EmptyState } from '@git-webui/ui-components';
 import { getDiff, runStage } from './api.js';
+import { createDiffEditorOptions, DiffVisibilityToggle } from './diff-view-controls.js';
 import './monaco-config.js';
 
 interface WorkingCopyViewProps {
@@ -39,10 +40,12 @@ const DiffPane = ({
   repositoryId,
   entry,
   sideBySide,
+  showFullFile,
 }: {
   repositoryId: string;
   entry: FileStatus;
   sideBySide: boolean;
+  showFullFile: boolean;
 }) => {
   const kind = entry.staged && !entry.unstaged ? 'staged' : 'working';
   const diffQuery = useQuery({
@@ -69,12 +72,7 @@ const DiffPane = ({
         modified={diff.modifiedContent}
         language={languageForPath(entry.path)}
         theme="vs-dark"
-        options={{
-          readOnly: true,
-          renderSideBySide: sideBySide,
-          minimap: { enabled: false },
-          wordWrap: 'on',
-        }}
+        options={createDiffEditorOptions({ renderSideBySide: sideBySide, showFullFile })}
       />
     </div>
   );
@@ -234,6 +232,7 @@ export const WorkingCopyDiffPanel = ({
     if (typeof window === 'undefined') return false;
     return window.localStorage.getItem('git-webui-diff-layout') === 'split';
   });
+  const [showFullFile, setShowFullFile] = useState(false);
   const stageMutation = useMutation({
     mutationFn: ({ action, paths }: { action: 'stage' | 'unstage'; paths: string[] }) =>
       runStage(repositoryId!, action, paths),
@@ -250,6 +249,10 @@ export const WorkingCopyDiffPanel = ({
     stageMutation.mutate({ action, paths });
   };
 
+  useEffect(() => {
+    setShowFullFile(false);
+  }, [entry?.path]);
+
   if (repositoryId === null || entry === undefined) {
     return (
       <div className="working-diff-pane">
@@ -263,7 +266,13 @@ export const WorkingCopyDiffPanel = ({
   return (
     <div className="working-diff-pane">
       <div className="diff-header">
-        <span>{entry.path}</span>
+        <span className="diff-header-leading">
+          <DiffVisibilityToggle
+            showFullFile={showFullFile}
+            onToggle={() => setShowFullFile((current) => !current)}
+          />
+          <span>{entry.path}</span>
+        </span>
         <span className="diff-header-actions">
           <button
             className="small-action-button"
@@ -299,7 +308,12 @@ export const WorkingCopyDiffPanel = ({
         </span>
       </div>
       {operationError !== null && <div className="working-error">{operationError.message}</div>}
-      <DiffPane repositoryId={repositoryId} entry={entry} sideBySide={sideBySide} />
+      <DiffPane
+        repositoryId={repositoryId}
+        entry={entry}
+        sideBySide={sideBySide}
+        showFullFile={showFullFile}
+      />
     </div>
   );
 };

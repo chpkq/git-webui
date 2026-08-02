@@ -881,6 +881,10 @@ button:not(:disabled):active {
 }
 
 .commit-file-diff-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 37px;
   padding: 8px 13px;
   color: #7e8da0;
   background: #151b23;
@@ -1276,6 +1280,18 @@ button:not(:disabled):active {
   color: #9facbc;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 10px;
+}
+
+.diff-header-leading {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.diff-visibility-toggle {
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .monaco-diff {
