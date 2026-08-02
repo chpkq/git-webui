@@ -32,6 +32,25 @@ button:disabled {
   opacity: 0.5;
 }
 
+button:not(:disabled) {
+  cursor: pointer;
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease,
+    box-shadow 120ms ease,
+    color 120ms ease,
+    filter 120ms ease,
+    transform 120ms ease;
+}
+
+button:not(:disabled):hover {
+  filter: brightness(1.12);
+}
+
+button:not(:disabled):active {
+  transform: translateY(1px);
+}
+
 .app-shell {
   display: grid;
   grid-template-rows: 58px minmax(0, 1fr) 30px;

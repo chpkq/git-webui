@@ -9,6 +9,14 @@ test('首页显示 Git WebUI 工作台', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByText('Git WebUI')).toBeVisible();
   await expect(page.getByText('还没有注册仓库')).toBeVisible();
+  const registerButton = page.getByRole('button', { name: '注册仓库' }).first();
+  const defaultFilter = await registerButton.evaluate(
+    (element) => getComputedStyle(element).filter,
+  );
+  await registerButton.hover();
+  await expect
+    .poll(() => registerButton.evaluate((element) => getComputedStyle(element).filter))
+    .not.toBe(defaultFilter);
 });
 
 test('注册仓库并查看 Working Copy', async ({ page }) => {
