@@ -324,7 +324,6 @@ button:not(:disabled):active {
   grid-template-rows: auto minmax(0, 1fr);
 }
 
-.detail-column-empty,
 .detail-column-working {
   display: block;
 }
