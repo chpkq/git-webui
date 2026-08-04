@@ -1,7 +1,6 @@
-import { createReadStream } from 'node:fs';
+import { createReadStream, existsSync } from 'node:fs';
 import { readFile, stat } from 'node:fs/promises';
 import { createServer, request as httpRequest } from 'node:http';
-import { log } from 'node:console';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
@@ -12,10 +11,17 @@ const packageRoot =
   path.basename(scriptDirectory) === 'scripts'
     ? path.resolve(scriptDirectory, '..')
     : scriptDirectory;
-const serverRoot = path.join(packageRoot, 'server');
-const webRoot = path.join(packageRoot, 'web');
+const serverRoot = existsSync(path.join(packageRoot, 'server'))
+  ? path.join(packageRoot, 'server')
+  : path.join(packageRoot, 'apps', 'server');
+const webRoot = existsSync(path.join(packageRoot, 'web'))
+  ? path.join(packageRoot, 'web')
+  : path.join(packageRoot, 'apps', 'web', 'dist');
 const serverPort = Number(process.env.GIT_WEBUI_SERVER_PORT ?? '3001');
 const webPort = Number(process.env.GIT_WEBUI_WEB_PORT ?? '9001');
+const webHost = process.env.GIT_WEBUI_WEB_HOST ?? '0.0.0.0';
+const serverHost = process.env.GIT_WEBUI_HOST ?? '127.0.0.1';
+const loopbackHosts = new Set(['127.0.0.1', 'localhost', '::1']);
 const contentTypes = {
   '.css': 'text/css; charset=utf-8',
   '.html': 'text/html; charset=utf-8',
@@ -26,11 +32,17 @@ const contentTypes = {
   '.woff2': 'font/woff2',
 };
 
+if (!loopbackHosts.has(webHost) && loopbackHosts.has(serverHost)) {
+  console.warn(
+    'Standalone WebUI 当前对外监听，但后端保持回环绑定；远程访问前请配置鉴权或使用 HTTPS 反向代理。',
+  );
+}
+
 const serverProcess = spawn(process.execPath, [path.join(serverRoot, 'dist/index.js')], {
   cwd: serverRoot,
   env: {
     ...process.env,
-    GIT_WEBUI_HOST: '127.0.0.1',
+    GIT_WEBUI_HOST: serverHost,
     GIT_WEBUI_PORT: String(serverPort),
     GIT_WEBUI_DATABASE:
       process.env.GIT_WEBUI_DATABASE ?? path.join(packageRoot, 'data', 'git-webui.sqlite'),
@@ -94,17 +106,68 @@ const webServer = createServer((request, response) => {
   void serveFile(request, response);
 });
 
-webServer.listen(webPort, '0.0.0.0', () => {
-  log(`Standalone WebUI: http://127.0.0.1:${webPort}`);
+webServer.listen(webPort, webHost, () => {
+  console.log(`Standalone WebUI: http://127.0.0.1:${webPort}`);
 });
 
-const shutdown = () => {
-  webServer.close();
-  serverProcess.kill('SIGTERM');
+let shutdownStarted = false;
+
+const closeWebServer = () =>
+  new Promise((resolve) => {
+    if (!webServer.listening) {
+      resolve();
+      return;
+    }
+    webServer.close(() => resolve());
+  });
+
+const stopServerProcess = () =>
+  new Promise((resolve) => {
+    if (serverProcess.exitCode !== null) {
+      resolve();
+      return;
+    }
+
+    const timer = setTimeout(resolve, 5000);
+    serverProcess.once('exit', () => {
+      clearTimeout(timer);
+      resolve();
+    });
+    serverProcess.kill('SIGTERM');
+  });
+
+const shutdown = async (signal = 'SIGTERM') => {
+  if (shutdownStarted) return;
+  shutdownStarted = true;
+
+  await closeWebServer();
+  await stopServerProcess();
+
+  if (serverProcess.exitCode === null) {
+    serverProcess.kill('SIGKILL');
+  }
+
+  if (signal === 'SIGINT' || signal === 'SIGTERM') process.exit(0);
 };
-process.once('SIGINT', shutdown);
-process.once('SIGTERM', shutdown);
+
+process.once('SIGINT', () => {
+  void shutdown('SIGINT');
+});
+process.once('SIGTERM', () => {
+  void shutdown('SIGTERM');
+});
+serverProcess.once('error', (error) => {
+  console.error(`后端服务启动失败：${error.message}`);
+  void shutdown('SIGTERM');
+});
 serverProcess.once('exit', (code) => {
-  webServer.close();
-  process.exitCode = code ?? 1;
+  if (shutdownStarted) return;
+  shutdownStarted = true;
+  void closeWebServer().finally(() => {
+    process.exit(code ?? 1);
+  });
+});
+webServer.once('error', (error) => {
+  console.error(`Standalone WebUI 启动失败：${error.message}`);
+  void shutdown('SIGTERM');
 });

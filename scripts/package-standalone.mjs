@@ -1,4 +1,4 @@
-import { cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { chmod, cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { log } from 'node:console';
@@ -9,6 +9,7 @@ const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '
 const packageJson = JSON.parse(await readFile(path.join(projectRoot, 'package.json'), 'utf8'));
 const outputRoot = path.join(projectRoot, 'release', `git-webui-v${packageJson.version}`);
 const serverOutput = path.join(outputRoot, 'server');
+const binOutput = path.join(outputRoot, 'bin');
 
 await rm(outputRoot, { recursive: true, force: true });
 await mkdir(outputRoot, { recursive: true });
@@ -27,6 +28,10 @@ await cp(
   path.join(projectRoot, 'scripts/start-standalone.mjs'),
   path.join(outputRoot, 'start.mjs'),
 );
+await mkdir(binOutput, { recursive: true });
+const releaseCli = path.join(binOutput, 'git-webui.mjs');
+await cp(path.join(projectRoot, 'bin/git-webui.mjs'), releaseCli);
+await chmod(releaseCli, 0o755);
 await cp(path.join(projectRoot, 'README.md'), path.join(outputRoot, 'README.md'));
 await cp(path.join(projectRoot, '.env.example'), path.join(outputRoot, '.env.example'));
 await mkdir(path.join(outputRoot, 'docs'), { recursive: true });
@@ -39,5 +44,20 @@ await cp(
   path.join(outputRoot, 'docs/release-checklist.md'),
 );
 await writeFile(path.join(outputRoot, 'VERSION'), `${packageJson.version}\n`, 'utf8');
+await writeFile(
+  path.join(outputRoot, 'package.json'),
+  `${JSON.stringify(
+    {
+      name: packageJson.name,
+      version: packageJson.version,
+      private: true,
+      type: 'module',
+      bin: { 'git-webui': './bin/git-webui.mjs' },
+    },
+    null,
+    2,
+  )}\n`,
+  'utf8',
+);
 
 log(`Standalone 包已生成：${outputRoot}`);

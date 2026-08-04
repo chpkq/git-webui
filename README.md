@@ -100,19 +100,49 @@ corepack pnpm --filter @git-webui/server start
 
 ### Standalone 目录包
 
-Standalone 包包含后端生产依赖、前端静态文件和单进程启动代理，输出目录带有 V0.1 版本号：
+Standalone 包包含后端生产依赖、前端静态文件、单进程启动代理和 `git-webui` 进程管理 CLI，输出目录带有 V0.1 版本号：
 
 ```bash
 corepack pnpm package:standalone
 cd release/git-webui-v0.1.0
+corepack pnpm link --global
 GIT_WEBUI_ALLOWED_ROOTS=/Users/you/src \
-GIT_WEBUI_AUTH_ENABLED=true \
-GIT_WEBUI_AUTH_PASSWORD='change-this-long-password' \
-GIT_WEBUI_SESSION_SECRET='use-a-random-secret-at-least-32-chars' \
-node start.mjs
+GIT_WEBUI_DATABASE=/Users/you/.local/share/git-webui/data.sqlite \
+git-webui start
 ```
 
-默认访问 <http://127.0.0.1:9001>。Standalone 启动器把前端发布到所有网卡、后端绑定到本机回环地址；需要 LAN/Tailscale 访问时，应放在 HTTPS 反向代理之后，并完成登录、CSRF 和权限配置。
+默认 Web 入口监听 `0.0.0.0:9001`，本机可通过 <http://127.0.0.1:9001> 访问；后端仍默认绑定 `127.0.0.1:3001`。由于 standalone 会代理 `/api` 和 `/health`，默认配置不应直接暴露在不可信网络；提供 LAN/Tailscale 访问前必须配置鉴权或放在 HTTPS 反向代理之后。
+
+### 本地进程管理与 macOS 登录启动
+
+CLI 默认管理当前源码或 Standalone 目录下的服务，状态、日志和 PID 文件保存在用户目录，不写入仓库：
+
+```bash
+git-webui start
+git-webui status
+git-webui logs
+git-webui logs -f
+git-webui restart
+git-webui stop
+```
+
+macOS 上启用用户登录后自动启动和异常重启：
+
+```bash
+git-webui startup enable
+git-webui startup status
+git-webui startup disable
+```
+
+该命令生成 `~/Library/LaunchAgents/dev.git-webui.service.plist`，由当前用户的 `launchd` 管理，不需要 root 权限。`startup enable` 会立即加载并启动服务；`git-webui stop` 会卸载当前登录会话中的 LaunchAgent，之后再次执行 `git-webui startup enable` 即可恢复管理。LaunchAgent 不会复制 `GIT_WEBUI_AUTH_PASSWORD` 或 `GIT_WEBUI_SESSION_SECRET`；远程模式的秘密必须由单独的安全启动环境提供，不能写进 plist。
+
+直接运行前台进程用于诊断：
+
+```bash
+git-webui serve --foreground
+```
+
+源码目录使用 CLI 前先执行 `corepack pnpm build`；Standalone 目录可直接使用。服务默认使用 `GIT_WEBUI_WEB_PORT=9001`、`GIT_WEBUI_SERVER_PORT=3001`，可通过环境变量覆盖。
 
 ### Docker Compose + Nginx
 
@@ -131,7 +161,7 @@ curl http://127.0.0.1:9001/health
 
 ## LAN、Tailscale 与反向代理边界
 
-- 本机开发后端默认绑定 `127.0.0.1`，开发前端默认绑定 `0.0.0.0`；Standalone 启动器仍显式绑定 `127.0.0.1`。
+- 本机开发后端默认绑定 `127.0.0.1`，开发前端和 Standalone Web 入口默认绑定 `0.0.0.0`；Standalone 后端仍绑定 `127.0.0.1`。
 - 后端只有绑定非回环地址时才必须设置 `GIT_WEBUI_ENABLE_REMOTE=true`、密码、session secret 和角色；缺少任一项服务会拒绝启动。
 - 更推荐由 Nginx/Caddy/Traefik 终止 HTTPS，再转发 `/`、`/api` 和 `/health`；反向代理必须支持 SSE，关闭 `/api/operations/events` 的缓冲并提高读取超时。
 - Tailscale ACL、HTTPS 证书和主机防火墙属于部署层控制，不能替代 WebUI 登录、角色校验和 CSRF。

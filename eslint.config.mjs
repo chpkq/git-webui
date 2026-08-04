@@ -17,4 +17,15 @@ export default tseslint.config(
       ],
     },
   },
+  {
+    files: ['**/*.{js,mjs}'],
+    languageOptions: {
+      globals: {
+        clearTimeout: 'readonly',
+        console: 'readonly',
+        process: 'readonly',
+        setTimeout: 'readonly',
+      },
+    },
+  },
 );

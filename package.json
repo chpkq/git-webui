@@ -2,15 +2,27 @@
   "name": "git-webui",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "packageManager": "pnpm@10.14.0",
   "engines": {
     "node": ">=22.12.0"
+  },
+  "bin": {
+    "git-webui": "./bin/git-webui.mjs"
   },
   "scripts": {
     "build": "pnpm -r build",
     "build:packages": "pnpm --filter @git-webui/shared build && pnpm --filter @git-webui/git-core build && pnpm --filter @git-webui/ui-components build",
     "package:standalone": "pnpm build && node scripts/package-standalone.mjs",
     "dev": "pnpm build:packages && pnpm --parallel --filter @git-webui/server --filter @git-webui/web dev",
+    "start": "node bin/git-webui.mjs start",
+    "stop": "node bin/git-webui.mjs stop",
+    "restart": "node bin/git-webui.mjs restart",
+    "status": "node bin/git-webui.mjs status",
+    "logs": "node bin/git-webui.mjs logs",
+    "startup:enable": "node bin/git-webui.mjs startup enable",
+    "startup:disable": "node bin/git-webui.mjs startup disable",
+    "startup:status": "node bin/git-webui.mjs startup status",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "eslint .",
