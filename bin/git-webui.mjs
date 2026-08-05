@@ -17,6 +17,11 @@ import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import {
+  assertSecureEnvironmentFile,
+  hasRequiredAuthSecrets,
+  loadProjectEnvironment,
+} from '../scripts/environment.mjs';
 
 const cliFile = fileURLToPath(import.meta.url);
 const projectRoot = path.resolve(path.dirname(cliFile), '..');
@@ -82,7 +87,12 @@ export function getServicePaths({
   };
 }
 
-export function getServiceConfig({ env = process.env, ...options } = {}) {
+export function getServiceConfig({
+  env = process.env,
+  environmentFilePath = null,
+  environmentFileValues = {},
+  ...options
+} = {}) {
   const paths = getServicePaths({ env, ...options });
   const webPort = parsePort(env.GIT_WEBUI_WEB_PORT, 9001, 'GIT_WEBUI_WEB_PORT');
   const serverPort = parsePort(env.GIT_WEBUI_SERVER_PORT, 3001, 'GIT_WEBUI_SERVER_PORT');
@@ -93,6 +103,8 @@ export function getServiceConfig({ env = process.env, ...options } = {}) {
     webPort,
     serverPort,
     healthUrl: `http://127.0.0.1:${webPort}/health`,
+    environmentFilePath,
+    environmentFileValues,
   };
 }
 
@@ -351,11 +363,18 @@ function assertLaunchAgentEnvironmentSafe(config) {
   const authRequested =
     config.env.GIT_WEBUI_AUTH_ENABLED === 'true' || !loopbackHosts.has(serverHost);
 
-  if (authRequested) {
+  if (!authRequested) return;
+
+  if (
+    config.environmentFilePath === null ||
+    !hasRequiredAuthSecrets(config.environmentFileValues)
+  ) {
     throw new Error(
-      'startup enable 不会把密码或 session secret 写入 LaunchAgent；请为远程/鉴权模式提供独立的安全启动环境。',
+      'startup enable 不会把密码或 session secret 写入 LaunchAgent；请在项目 .env 中配置完整鉴权秘密。',
     );
   }
+
+  assertSecureEnvironmentFile(config.environmentFilePath);
 }
 
 export function startupStatus(config) {
@@ -583,7 +602,21 @@ async function statusCommand(config) {
 }
 
 export async function main(argv = process.argv.slice(2), options = {}) {
-  const config = getServiceConfig(options);
+  const hasCustomEnvironment = Object.prototype.hasOwnProperty.call(options, 'env');
+  const environmentSource = hasCustomEnvironment
+    ? {
+        environment: options.env ?? {},
+        envFilePath: null,
+        fileEnvironment: {},
+      }
+    : loadProjectEnvironment(process.env, options.root ?? projectRoot);
+  Object.assign(process.env, environmentSource.environment);
+  const config = getServiceConfig({
+    ...options,
+    env: environmentSource.environment,
+    environmentFilePath: environmentSource.envFilePath,
+    environmentFileValues: environmentSource.fileEnvironment,
+  });
   const [command = 'start', ...args] = argv;
 
   switch (command) {

@@ -43,6 +43,12 @@ V0.1 不实现 Commit 创建、Stash、Merge、Rebase、Cherry-pick、Revert、F
 
 默认后端只允许本机访问，开发前端和 Web 容器可按配置绑定所有网卡；仓库只能注册在 `GIT_WEBUI_ALLOWED_ROOTS` 内。环境变量使用系统的路径分隔符分隔多个根目录：macOS/Linux 使用 `:`，Windows 使用 `;`。
 
+源码开发、Standalone CLI 和 macOS 登录启动会自动读取项目根目录的 `.env`。显式导出的环境变量优先于 `.env`；未创建 `.env` 时仍使用默认值或显式环境变量。`.env` 中的密码和 session secret 不会写入 LaunchAgent；如果文件包含这些敏感配置，macOS/Linux 上请确保文件仅所有者可读写：
+
+```bash
+chmod 600 .env
+```
+
 ```bash
 GIT_WEBUI_ALLOWED_ROOTS=/Users/you/src:/Users/you/work \
 GIT_WEBUI_DATABASE=/Users/you/.local/share/git-webui/data.sqlite \
@@ -106,10 +112,14 @@ Standalone 包包含后端生产依赖、前端静态文件、单进程启动代
 corepack pnpm package:standalone
 cd release/git-webui-v0.1.0
 corepack pnpm link --global
+cp .env.example .env
+chmod 600 .env
 GIT_WEBUI_ALLOWED_ROOTS=/Users/you/src \
 GIT_WEBUI_DATABASE=/Users/you/.local/share/git-webui/data.sqlite \
 git-webui start
 ```
+
+Standalone 目录中的 `.env` 也会在服务进程启动时读取；命令行中显式设置的变量优先于文件内容。
 
 默认 Web 入口监听 `0.0.0.0:9001`，本机可通过 <http://127.0.0.1:9001> 访问；后端仍默认绑定 `127.0.0.1:3001`。由于 standalone 会代理 `/api` 和 `/health`，默认配置不应直接暴露在不可信网络；提供 LAN/Tailscale 访问前必须配置鉴权或放在 HTTPS 反向代理之后。
 
@@ -134,7 +144,7 @@ git-webui startup status
 git-webui startup disable
 ```
 
-该命令生成 `~/Library/LaunchAgents/dev.git-webui.service.plist`，由当前用户的 `launchd` 管理，不需要 root 权限。`startup enable` 会立即加载并启动服务；`git-webui stop` 会卸载当前登录会话中的 LaunchAgent，之后再次执行 `git-webui startup enable` 即可恢复管理。LaunchAgent 不会复制 `GIT_WEBUI_AUTH_PASSWORD` 或 `GIT_WEBUI_SESSION_SECRET`；远程模式的秘密必须由单独的安全启动环境提供，不能写进 plist。
+该命令生成 `~/Library/LaunchAgents/dev.git-webui.service.plist`，由当前用户的 `launchd` 管理，不需要 root 权限。`startup enable` 会立即加载并启动服务；`git-webui stop` 会卸载当前登录会话中的 LaunchAgent，之后再次执行 `git-webui startup enable` 即可恢复管理。LaunchAgent 不会复制 `GIT_WEBUI_AUTH_PASSWORD` 或 `GIT_WEBUI_SESSION_SECRET`；服务进程会从权限安全的项目 `.env` 读取这些配置，不能将其写进 plist。
 
 直接运行前台进程用于诊断：
 

@@ -10,6 +10,7 @@ const packageJson = JSON.parse(await readFile(path.join(projectRoot, 'package.js
 const outputRoot = path.join(projectRoot, 'release', `git-webui-v${packageJson.version}`);
 const serverOutput = path.join(outputRoot, 'server');
 const binOutput = path.join(outputRoot, 'bin');
+const scriptsOutput = path.join(outputRoot, 'scripts');
 
 await rm(outputRoot, { recursive: true, force: true });
 await mkdir(outputRoot, { recursive: true });
@@ -29,8 +30,13 @@ await cp(
   path.join(outputRoot, 'start.mjs'),
 );
 await mkdir(binOutput, { recursive: true });
+await mkdir(scriptsOutput, { recursive: true });
 const releaseCli = path.join(binOutput, 'git-webui.mjs');
 await cp(path.join(projectRoot, 'bin/git-webui.mjs'), releaseCli);
+await cp(
+  path.join(projectRoot, 'scripts/environment.mjs'),
+  path.join(scriptsOutput, 'environment.mjs'),
+);
 await chmod(releaseCli, 0o755);
 await cp(path.join(projectRoot, 'README.md'), path.join(outputRoot, 'README.md'));
 await cp(path.join(projectRoot, '.env.example'), path.join(outputRoot, '.env.example'));

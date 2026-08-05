@@ -12,6 +12,7 @@ const inheritedEnvironment = Object.fromEntries(
 const e2eEnvironment = {
   ...inheritedEnvironment,
   GIT_WEBUI_ALLOWED_ROOTS: [path.resolve(process.cwd()), os.tmpdir()].join(path.delimiter),
+  GIT_WEBUI_AUTH_ENABLED: 'false',
   GIT_WEBUI_DATABASE: path.join(e2eDataRoot, 'data.sqlite'),
   GIT_WEBUI_HOST: '127.0.0.1',
   GIT_WEBUI_PORT: String(e2eServerPort),
